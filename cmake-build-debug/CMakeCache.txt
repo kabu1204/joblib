@@ -230,6 +230,12 @@ joblib_BINARY_DIR:STATIC=/Users/ycy/Documents/cpp/joblib/cmake-build-debug
 //Value Computed by CMake
 joblib_SOURCE_DIR:STATIC=/Users/ycy/Documents/cpp/joblib
 
+//Value Computed by CMake
+test_BINARY_DIR:STATIC=/Users/ycy/Documents/cpp/joblib/cmake-build-debug/test
+
+//Value Computed by CMake
+test_SOURCE_DIR:STATIC=/Users/ycy/Documents/cpp/joblib/test
+
 
 ########################
 # INTERNAL cache entries
@@ -335,7 +341,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=1
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=2
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP

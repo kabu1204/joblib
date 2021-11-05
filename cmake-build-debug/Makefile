@@ -129,6 +129,19 @@ joblib/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/joblib.dir/build.make CMakeFiles/joblib.dir/build
 .PHONY : joblib/fast
 
+#=============================================================================
+# Target rules for targets named test
+
+# Build rule for target.
+test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test
+.PHONY : test
+
+# fast build rule for target.
+test/fast:
+	$(MAKE) $(MAKESILENT) -f test/CMakeFiles/test.dir/build.make test/CMakeFiles/test.dir/build
+.PHONY : test/fast
+
 library.o: library.cpp.o
 .PHONY : library.o
 
@@ -162,6 +175,7 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... joblib"
+	@echo "... test"
 	@echo "... library.o"
 	@echo "... library.i"
 	@echo "... library.s"
