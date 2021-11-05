@@ -1,1 +1,1 @@
-# C++ Implementation of joblib
+# C++ version of python module 'joblib'
