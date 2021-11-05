@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
-project(joblib)
+project(src)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_subdirectory(src)
-
-add_subdirectory(test)
+add_library(joblib SHARED library.cpp)
