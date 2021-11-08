@@ -46,7 +46,7 @@ output_type(Serializer& buf, T& value) {
     output_type_impl(buf, value);
 }
 
-#include "STLTypeImpl.hpp"
+#include "InputTypeImpl.hpp"
 
 template<typename T>
 inline Serializer& Serializer::operator<<(T const& value) {
