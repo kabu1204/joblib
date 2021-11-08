@@ -1,9 +1,11 @@
-//
-// Created by yuchengye on 2021/11/5.
-//
-
 #include "main.h"
 
-int main(){
+void test_for_xxx(){
+    // do something here
     hello();
+    return;
+}
+
+int main(){
+    test_for_xxx();
 }

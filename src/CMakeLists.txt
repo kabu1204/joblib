@@ -3,4 +3,6 @@ project(src)
 
 set(CMAKE_CXX_STANDARD 14)
 
+include_directories(../include)
+
 add_library(joblib SHARED library.cpp)

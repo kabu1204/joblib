@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 
 message(STATUS "start building test...")
 
-include_directories(../)
+include_directories(../include)
 
 link_directories(../cmake-build-relwithdebinfo/)
 
