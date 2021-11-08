@@ -1,6 +1,7 @@
 #include "library.h"
 #include <iostream>
 #include <utility>
+INITIALIZE_EASYLOGGINGPP
 
 void hello() {
     std::cout << "Hello, World!" << std::endl;

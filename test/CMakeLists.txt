@@ -7,7 +7,7 @@ message(STATUS "start building test...")
 
 include_directories(../include)
 
-link_directories(../cmake-build-relwithdebinfo/)
+link_directories(../cmake-build-debug/)
 
 add_executable(test main.cpp main.h)
 

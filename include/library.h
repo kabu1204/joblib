@@ -8,10 +8,15 @@
  */
 #ifndef JOBLIB_LIBRARY_H
 #define JOBLIB_LIBRARY_H
-#include <cstdio>
+#include "cstdio"
 #include "thread"
 #include "mutex"
 #include "string"
+#include "memory"
+#include <functional>
+
+#include "range.h"
+#include "easylogging/easylogging++.h"
 
 void hello();
 
