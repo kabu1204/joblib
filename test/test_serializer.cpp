@@ -42,7 +42,7 @@ int main() {
     TEST_Serializer(S, person, person_equal, "Person");
 
     {
-        std::vector<double> vec{ 3.14,1.59,2.65,3.58 };
+        std::vector<std::string> vec{ "d","y","l","dw" };
         auto equal = [](auto a, auto b) { return a == b; };
         TEST_Serializer(S, vec, equal, "std::vector");
     }
@@ -51,12 +51,7 @@ int main() {
         std::stack<int> stack;
         stack.push(1); stack.push(2); stack.push(3);
         auto equal = [](auto a, auto b) {
-            if (a.size() != b.size())return false;
-            while (!a.empty()) {
-                if (a.top() != b.top())return false;
-                a.pop(); b.pop();
-            }
-            return true;
+            return a == b;
         };
         TEST_Serializer(S, stack, equal, "std::stack");
     }
@@ -65,12 +60,7 @@ int main() {
         std::queue<int> que;
         que.push(1); que.push(2); que.push(3);
         auto equal = [](auto a, auto b) {
-            if (a.size() != b.size())return false;
-            while (!a.empty()) {
-                if (a.front() != b.front())return false;
-                a.pop(); b.pop();
-            }
-            return true;
+            return a == b;
         };
         TEST_Serializer(S, que, equal, "std::queue");
     }
