@@ -25,7 +25,7 @@ void input_type_impl(Serializer& buf, std::vector<Ty, Alloc> const& con) {
 }
 
 template < typename Ty, typename Alloc>
-void outnput_type_impl(Serializer& buf, std::vector<Ty, Alloc>& con) {
+void output_type_impl(Serializer& buf, std::vector<Ty, Alloc>& con) {
     size_t n;
     buf >> n;
     con.clear();
@@ -102,19 +102,22 @@ void output_type_impl(Serializer& buf, std::queue<Ty, Container>& que) {
 }
 
 #include <stack>
+#include <algorithm>
 template <class Ty, class Container>
 void input_type_impl(Serializer& buf, std::stack<Ty, Container> const& stack) {
     std::stack<Ty, Container> tmp = stack;
     size_t n = stack.size();
-    while (n--) {
-        tmp.push(tmp.top());
+    buf << n;
+    std::vector<Ty> vec;
+    while (!tmp.empty()) {
+        vec.push_back(tmp.top());
         tmp.pop();
     }
-    n = stack.size();
-    buf << n;
-    while (!tmp.empty()) {
-        buf << tmp.top();
-        tmp.pop();
+    std::reverse(vec.begin(), vec.end());
+    
+    for (auto const& elem : vec)
+    {
+        buf << elem;
     }
 }
 
@@ -213,7 +216,6 @@ void output_type_impl(Serializer& buf, std::unordered_map<Kty, Ty, Hasher, Keyeq
     map.clear();
     map.reserve(n);
     while (n--) {
-        //为了更通用最好以后改成类型萃取，
         typename Alloc::value_type tmp;
         buf >> tmp;
         map[tmp.first] = tmp.second;
