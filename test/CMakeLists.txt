@@ -12,3 +12,5 @@ link_directories(../cmake-build-relwithdebinfo/)
 add_executable(test main.cpp main.h)
 
 target_link_libraries(test joblib)
+
+add_executable(test_serializer test_serializer.cpp)
