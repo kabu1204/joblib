@@ -2,7 +2,7 @@
 // Created by yuchengye on 2021/11/6.
 //
 #include "library.h"
-#include "range.h"
+#include "parallel/range.h"
 #include <string>
 
 Range::RangeIterator::RangeIterator(long _var, long _step): var( _var ), step( _step ) {}

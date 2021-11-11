@@ -3,6 +3,11 @@ project(src)
 
 set(CMAKE_CXX_STANDARD 14)
 
-include_directories(../include)
+set(INC_DIR /usr/local/include ../include)
+set(LINK_DIR /usr/local/lib/)
 
-add_library(joblib SHARED library.cpp range.cpp generator.cpp ../include/easylogging/easylogging++.cc)
+include_directories(${INC_DIR})
+link_directories(${LINK_DIR})
+#link_libraries(tbox)
+
+add_library(joblib SHARED library.cpp parallel/range.cpp ../include/easylogging/easylogging++.cc)

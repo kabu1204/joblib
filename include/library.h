@@ -15,13 +15,24 @@
 #include "memory"
 #include <functional>
 
-#include "range.h"
+#include "parallel/threadpool.hpp"
+#include "parallel/range.h"
+#include "parallel/generator.hpp"
 #include "easylogging/easylogging++.h"
 
 void hello();
 
 
 class Parallel{
+
+public:
+    explicit Parallel(int n_jobs=1, std::string backend="thread", int verbose=0, double timeout=60.0,
+             std::string pre_dispatch="2 * n_jobs", std::string batch_size="auto", std::string temp_folder="",
+             std::string max_nbytes="1M", std::string mmap_mode="r", std::string prefer="", std::string require="");
+
+    void operator() (generator<std::function<void()>>&& G);
+
+private:
     int n_jobs;
     std::string backend;
     std::string prefer;
@@ -34,11 +45,7 @@ class Parallel{
     std::string max_nbytes;
     std::string mmap_mode;
 
-public:
-
-    explicit Parallel(int n_jobs=1, std::string backend="thread", int verbose=0, double timeout=60.0,
-             std::string pre_dispatch="2 * n_jobs", std::string batch_size="auto", std::string temp_folder="",
-             std::string max_nbytes="1M", std::string mmap_mode="r", std::string prefer="", std::string require="");
+    threadpool* tp;
 };
 
 #endif //JOBLIB_LIBRARY_H

@@ -1,5 +1,5 @@
 set_version("0.0.1")
-set_xmakever("2.5.0")
+set_xmakever("2.5.1")
 set_languages("cxx14")
 set_project("joblib")
 set_targetdir("xmake-build")

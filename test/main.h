@@ -2,8 +2,10 @@
 #define JOBLIB_MAIN_H
 
 #include "library.h"
-#include "range.h"
-#include "generator.h"
+#include "parallel/range.h"
+#include "parallel/generator.hpp"
+#include "parallel/threadpool.hpp"
+#include "parallel/async.hpp"
 
 #include "iostream"
 #include "string"
@@ -11,5 +13,7 @@
 #include "memory"
 #include "cstdio"
 #include "vector"
+#include "chrono"
+#include "csetjmp"
 
 #endif //JOBLIB_MAIN_H

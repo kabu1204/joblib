@@ -13,5 +13,11 @@ Parallel::Parallel(int n_jobs, std::string backend, int verbose, double timeout,
                    pre_dispatch(pre_dispatch), batch_size(batch_size), temp_folder(std::move(temp_folder)), max_nbytes(std::move(max_nbytes)),
                    mmap_mode(mmap_mode), prefer(prefer), require(require)
 {
-    std::cout<<"Creating parallel task..."<<std::endl;
+    LOG(INFO)<<"Creating parallel thread pool...";
+}
+
+void Parallel::operator()(generator<std::function<void()>> &&G) {
+    while(!G.stopped()){
+        G.next()();
+    }
 }

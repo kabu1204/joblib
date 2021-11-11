@@ -19,3 +19,4 @@ cmake-build-reldeb/
 **/CMakeFiles/Makefile2
 **/CMakeFiles/TargetDirectories.txt
 **/Makefile
+/test/att.s
