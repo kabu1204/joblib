@@ -4,9 +4,29 @@ void resize_image(){}
 void read_image(){}
 void save_image(){}
 
+coroutine *main_co;
+coroutine *sub_co;
+
+void test_for_coro(){
+    main_co=new coroutine();
+    sub_co=new coroutine([=](){
+        int i;
+        std::cout<<"\tin co1 first\n";
+        swap64(sub_co, main_co);
+        std::cout<<"\tin co1 twice\n";
+        swap64(sub_co, main_co);
+        return;
+    });
+    std::cout<<"this is main coro!\n"<<std::endl;
+    swap64(main_co, sub_co);
+    std::cout<<"this is main coro!\n"<<std::endl;
+    swap64(main_co, sub_co);
+    std::cout<<"all end\n"<<std::endl;
+}
+
 void test_for_async(){
     std::vector<std::function<void()> > vec;
-    for(auto i:Range(MAX_COROUTINES_PER_LOOP-1)){
+    for(auto i:Range(2)){
         auto func = [=](){
             std::printf("child coro%d begin\n", i);
             running_coro = i+1; waiting_coro = 0;
@@ -100,8 +120,14 @@ void b(){
         longjmp(abuf, 3);
 }
 
+template <class R, class... Args>
+R getRetValue(R(*)(Args...));
+
 int main(){
-    test_for_async();
+//    auto a = [](int c){return 1;};
+//    using ret_t = decltype(getRetValue(tf));
+    test_for_coro();
+//    test_for_async();
 //    test_for_parallel();
 //    test_for_generator();
 //    test_for_threadpool();

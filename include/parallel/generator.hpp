@@ -16,7 +16,7 @@
 #define GENERATOR_MAX_YIELDS_SIZE ~(1<<31)-1
 
 template<typename F, typename... Args>
-std::function<void ()> delayed(F&& function, Args&&...args){
+auto delayed(F&& function, Args&&...args){
 //    std::function<void ()>* wrapped_func = std::make_shared<std::function<void ()> >(std::bind(std::forward<F>(function), std::forward<Args>(args)...));
     return std::bind(std::forward<F>(function), std::forward<Args>(args)...);
 //    return *wrapped_func;
