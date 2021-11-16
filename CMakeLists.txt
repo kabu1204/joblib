@@ -3,6 +3,8 @@ project(joblib)
 
 set(CMAKE_CXX_STANDARD 14)
 
+#add_compile_options(-fno-stack-check)
+
 add_subdirectory(src)
 
 add_subdirectory(test)

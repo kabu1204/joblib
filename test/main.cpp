@@ -7,38 +7,71 @@ void save_image(){}
 coroutine *main_co;
 coroutine *sub_co;
 
+void test_for_eventloop(){
+    std::cin.tie(nullptr);
+//    sub_co = new coroutine([=](){
+//        int i;
+//        std::cout<<"\tin co1 first\n";
+//        std::cout<<"saved caller's coro:"<<running_coro->caller_coro<<std::endl;
+//        co_yield();
+//        std::cout<<"\tin co1 twice\n";
+//        co_yield();
+//        return;
+//    });
+    clock_t start = std::clock();
+    std::queue<coroutine*> vec;
+    coroutine *new_co;
+    for(int i=0;i<4096;++i){
+        new_co = new coroutine([=](){
+            std::cout<<"\tin co"<<i<<" first"<<std::endl;
+            std::cout<<"saved caller's coro:"<<running_coro->caller_coro<<std::endl;
+            co_yield();
+            std::cout<<"\tin co"<<i<<" twice"<<std::endl;
+            co_yield();
+            return;
+        });
+        vec.push(new_co);
+    }
+    event_loop loop(vec, true);
+    clock_t end = std::clock();
+    std::cout<<1000*double(end-start)/CLOCKS_PER_SEC<<std::endl;
+//    loop.join();
+//    event_loop l(sub_co);
+}
+
 void test_for_coro(){
     main_co=new coroutine();
     sub_co=new coroutine([=](){
         int i;
         std::cout<<"\tin co1 first\n";
-        swap64(sub_co, main_co);
+        swap64v2(sub_co, main_co);
         std::cout<<"\tin co1 twice\n";
-        swap64(sub_co, main_co);
+        swap64v2(sub_co, main_co);
         return;
     });
+    std::cout<<"addr of sub_co:"<<sub_co<<std::endl;
     std::cout<<"this is main coro!\n"<<std::endl;
-    swap64(main_co, sub_co);
+    swap64v2(main_co, sub_co);
     std::cout<<"this is main coro!\n"<<std::endl;
-    swap64(main_co, sub_co);
+    swap64v2(main_co, sub_co);
     std::cout<<"all end\n"<<std::endl;
 }
 
 void test_for_async(){
-    std::vector<std::function<void()> > vec;
-    for(auto i:Range(2)){
-        auto func = [=](){
-            std::printf("child coro%d begin\n", i);
-            running_coro = i+1; waiting_coro = 0;
-            yield(999);
-            std::printf("middle%d %d %d %d\n", i, envs_state[0], envs_state[1], envs_state[2]);
-            yield(998);
-            std::printf("child coro%d begin\n", i);
-            coro_ret();
-        };
-        vec.push_back(func);
-    }
-    event_loop<void()> loop(vec);
+//    std::vector<std::function<void()> > vec;
+//    for(auto i:Range(2)){
+//        auto func = [=](){
+//            std::printf("child coro%d begin\n", i);
+//            running_coro = i+1; waiting_coro = 0;
+//            yield(999);
+//            std::printf("middle%d %d %d %d\n", i, envs_state[0], envs_state[1], envs_state[2]);
+//            yield(998);
+//            std::printf("child coro%d begin\n", i);
+//            coro_ret();
+//        };
+//        vec.push_back(func);
+//    }
+//    event_loop<void()> loop(vec);
 }
 
 void test_for_parallel(){
@@ -125,8 +158,9 @@ R getRetValue(R(*)(Args...));
 
 int main(){
 //    auto a = [](int c){return 1;};
-//    using ret_t = decltype(getRetValue(tf));
-    test_for_coro();
+//    using ret_t = decltype(getRetValue(coro_entry));
+    test_for_eventloop();
+//    test_for_coro();
 //    test_for_async();
 //    test_for_parallel();
 //    test_for_generator();

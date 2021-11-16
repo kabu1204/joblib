@@ -4,15 +4,17 @@
 
 #ifndef JOBLIB_ASYNC_HPP
 #define JOBLIB_ASYNC_HPP
-#define DEFAULT_CORO_STACK_SIZE 1024*1024
+#define DEFAULT_CORO_STACK_SIZE 1024*4
 #define MAX_COROUTINES_PER_LOOP 1024
 #define MAIN_CORO 0
+#define ALLOW_NESTED_ASYNC 0    // allow to create a new event loop in a running event loop
 #include "thread"
 #include "string"
 #include "chrono"
 #include "cstdio"
 #include "csetjmp"
 #include "iostream"
+
 
 int p(int x){std::printf("saving env %d\n",x); return x;};
 int p2(int x){std::printf("jumping env %d\n",x); return x;};
@@ -32,117 +34,238 @@ typedef int16_t DBYTE;
 typedef int8_t BYTE;
 
 class coroutine;
+class event_loop;
 
-thread_local int running_coro = MAIN_CORO;
-thread_local int waiting_coro = MAIN_CORO + 1;
-thread_local jmp_buf envs[MAX_COROUTINES_PER_LOOP];
-thread_local int envs_state[MAX_COROUTINES_PER_LOOP]={0};
-thread_local std::queue<int> jmpable_coros;
-thread_local coroutine* main_coro;
+thread_local coroutine* running_coro = nullptr;
+thread_local event_loop* curr_event_loop = nullptr;
 
-template<typename F>class event_loop;
+extern "C" void swap64(coroutine *old_co, coroutine *new_co);
+extern "C" void swap64v2(coroutine *old_co, coroutine *new_co);
+extern "C" void swapback(coroutine *curr_co);
+extern "C" void _co_end(coroutine *curr_co);
+extern "C" void _save_ctx(coroutine *coro);    // 保存相关的CPU寄存器：rbx, rbp, r12-r15
 
-void coro_end(){
-    return;
+struct coroutine_registers
+{
+    DWORD rdi;
+    DWORD rbx;
+    DWORD rbp;
+    DWORD r12;
+    DWORD r13;
+    DWORD r14;
+    DWORD r15;
+    coroutine_registers(){
+        rdi=0;
+        rbx=0;rbp=0;
+        r12=0;r13=0;r14=0;r15=0;
+    }
+};
+
+void co_end(){
+    // TODO: do cleaning job
+
+    _co_end(running_coro);
 }
 
-void tf(std::function<void()>* f){
-    std::cout<<"this is a test func\n";
+void co_yield();
+
+void coro_entry(std::function<void()>* f){
+    std::cout<<"this is a coro_entry\n";
     (*f)();
+    std::cout<<"exiting coro_entry...\n";
+    co_end();
 }
 
 class coroutine{
     DWORD *sp;
     DWORD *stack_space;
+    coroutine_registers regs;
+public:
+    coroutine *caller_coro;
     std::function<void()> wrapper;
     std::function<void()>* p;
 public:
     coroutine(){
         sp=0;
         stack_space=0;
+        status=0;
+        caller_coro=0;
     }
 
     template<typename F, typename... Arg>
     coroutine(F&& _function, Arg&&... args){
+        using ret_type = typename std::result_of<F(Arg...)>::type;
+        auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
+        auto task = std::make_shared<std::packaged_task<ret_type()>>(func);
+        std::future<ret_type> res = task->get_future();
+        if(std::is_same<void, ret_type>::value){
+            // 无返回值
+            wrapper = [&](){
+                status=1;
+                func();
+                status=0;
+            };
+        }
+        else{
+            // 有返回值
+            wrapper = [&](){
+                status=1;
+                func();
+                status=0;
+            };
+        }
+
+        p = &wrapper;
+        stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
+        sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
+        *(--sp)=(DWORD)co_end; // coroutine cleanup
+        std::cout<<"run addr:"<<sp<<std::endl;
+        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+        regs.rdi = (DWORD)p;
+        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
+        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
+        caller_coro = nullptr;
+    }
+
+    void reset(){
+        /*
+         * TODO: reset stack size
+         */
+        sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
+        *(--sp)=(DWORD)co_end; // coroutine cleanup
+        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+        regs.rdi = (DWORD)p;
+        caller_coro = nullptr;
+    }
+    template<typename F, typename... Arg>
+    void set(F&& _function, Arg&&... args){
+        using ret_type = typename std::result_of<F(Arg...)>::type;
         auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
         wrapper = [&](){
+            status=1;
             func();
-            stop();
+            status=0;
         };
         p = &wrapper;
-        stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)];
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
-        *(--sp)=(DWORD)coro_end; // coroutine cleanup
-        std::cout<<"run addr:"<<sp<<std::endl;
-        *(--sp)=(DWORD)tf; // user's function to run (rop style!)
-        *(--sp)=(DWORD)p;
-        std::cout<<"addr of wrapper:"<<p<<std::endl;
-        for (int saved=0;saved<6;saved++)
-            *(--sp)=0xdeadbeef; // initial values for saved registers
+        *(--sp)=(DWORD)co_end; // coroutine cleanup
+        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+        regs.rdi = (DWORD)p;
+        caller_coro = nullptr;
     }
-    void run(){
-        std::printf("run end\n");
+    void run() noexcept{
+        if(status==1){
+            std::cerr<<"Error running coroutine.\n";
+            return;
+        }
+        status = 1;
+        std::printf("starting to run...\n");
     }
-    void stop(){
-        std::cout<<"Coroutine end.\n";
+    void stop() noexcept {
+        status = 0;
+        std::cout << "Coroutine stopped." << std::endl;
     }
     void next(){
 
     }
-
+    friend class event_loop;
 private:
 //    std::function<void ()> wrapper;
-//    int status;
+    int status; // 0 for not started; 1 for running; 2 for suspended;
 };
 
-template<typename F>
+//template<typename F>
 class event_loop{
 public:
-    explicit event_loop(std::vector<std::function<F>> _coros){
-        std::memset(envs_state, -1, sizeof(envs_state));
-        envs_state[MAIN_CORO] = 0;
-        for(auto i:Range(_coros.size())){
-            jmpable_coros.push(i+1);
-        }
-        int res = setjmp(envs[MAIN_CORO]);
-        if(!jmpable_coros.empty()) waiting_coro = scheduler();
-        else return;    // complete
-        std::printf("current waiting coro:%d[%d %d %d]\n", waiting_coro, envs_state[0], envs_state[1], envs_state[2]);
-        if(envs_state[waiting_coro]==-1){
-            envs_state[waiting_coro]=0;
-            std::printf("starting to run coro:%d\n", waiting_coro);
-            _coros[waiting_coro-1]();
-        }
-        int t = waiting_coro; waiting_coro = running_coro; running_coro = t;
-        longjmp(envs[running_coro],1);
+    /*
+     * TODO: local_co应该是
+     */
+    event_loop():running(false){
+        local_coro = new coroutine();
     }
-//    event_loop(coroutine<F> coro){
-//        std::memset(envs_state, 0, sizeof(envs_state));
-//        std::printf("[main coro]ok\n");
-//        running_coro = 0; waiting_coro=1;
-//        int res = setjmp(envs[running_coro]);
-//        if(res==0)
-//        {coro.run();}
-//        std::printf("back to main coro %d %d\n", envs_state[0], envs_state[1]);
-//        yield(10);
-//        std::printf("main coro end\n");
-//        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-//        yield(12);
-//    }
-    int scheduler(){
-        waiting_coro = jmpable_coros.front();
-        jmpable_coros.pop();
-        return waiting_coro;
+
+    explicit event_loop(std::queue<coroutine*> q, bool run_in_current_thread=true):running(false),t_loop(nullptr){
+        local_coro = new coroutine();
+        coros = q;
+        run_until_complete(run_in_current_thread);
     }
+    explicit event_loop(coroutine* coro, bool run_in_current_thread=true):running(false),t_loop(nullptr){
+        local_coro = new coroutine();
+        coros.push(coro);
+        coro->caller_coro=local_coro;
+        std::cout<<"addr of coro:"<<coro<<std::endl;
+        std::cout<<"addr of coro's caller:"<<coro->caller_coro<<std::endl;
+        run_until_complete(run_in_current_thread);
+    }
+    int run_until_complete(bool run_in_current_thread=true){
+        if(coros.empty()){
+            return -1;
+        }
+        std::cout<<coros.size()<<std::endl;
+        auto f_loop = [&](){
+            curr_event_loop = this;
+            running = true;
+            do{
+                running_coro=scheduler();
+                swap64v2(local_coro, running_coro);
+                if(running_coro->status!=0) coros.push(running_coro);
+                running_coro=local_coro;
+            } while(!coros.empty());
+            running = false;
+        };
+        if(run_in_current_thread){
+            f_loop();
+        }
+        else{
+            t_loop = new std::thread(f_loop);
+//            t_loop.detach();
+        }
+    }
+    coroutine* scheduler(){
+        auto nxt_co = coros.front();
+        coros.pop();
+        return nxt_co;
+    }
+    bool is_running(){ return running; }
+    bool join(){ if(t_loop != nullptr){t_loop->join();}}
 private:
+    std::queue<coroutine*> coros;
+    coroutine* local_coro;
+    bool running;
+    std::thread *t_loop;
 };
 
-inline void coro_ret(){
-    longjmp(envs[MAIN_CORO], 1);
+void co_yield(){
+    /*
+     * TODO: 改成get_running_loop实现，减少thread local变量
+     */
+    std::cout<<"running_coro:"<<running_coro<<std::endl;
+    swapback(running_coro);
 }
 
-extern "C" void swap64(coroutine *old_co, coroutine *new_co);
-extern "C" void _save_ctx(coroutine *coro);    // 保存相关的CPU寄存器：rbx, rbp, r12-r15
+event_loop* get_running_loop(){
+    /*
+     * TODO: 该函数只能由协程或回调来调用，请包装成协程
+     */
+    if(!curr_event_loop->is_running()){
+        throw std::runtime_error("Current event loop is not running!\n");
+    }
+    return curr_event_loop;
+}
+
+event_loop* get_event_loop(){
+    /*
+     * TODO: 该函数只能由协程或回调来调用，请包装成协程
+     */
+    return  curr_event_loop;
+}
+
+bool set_event_loop(event_loop* loop){
+    /*
+     * TODO
+     */
+    curr_event_loop = loop;
+}
 
 /**
  * %rdi存的是old_co，也是 ”old_co->stack“的地址。(%rdi)就是old_co->stack
@@ -161,6 +284,9 @@ extern "C" void _save_ctx(coroutine *coro);    // 保存相关的CPU寄存器：
 __asm__(
 ".globl _swap64 \n\t"
 ".globl __save_ctx\n\t"
+".globl _swap64v2\n\t"
+".globl _swapback\n\t"
+".globl __co_end\n\t"
 "_swap64: \n\t"
 "pushq %rdi \n\t"
 "pushq %rbp \n\t"
@@ -182,7 +308,7 @@ __asm__(
 "popq %rdi \n\t"
 //"addq $8,%rsp \n\t"
 //"jmpq *-8(%rsp) \n\t"
- "retq \n\t"
+"retq \n\t"
 
 "__save_ctx:\n\t"
 "movq %rbx,16(%rdi)\n\t"    // 往后指令依次给coro->regs.rbx rbp ... 赋值
@@ -191,7 +317,50 @@ __asm__(
 "movq %r13,40(%rdi)\n\t"
 "movq %r14,48(%rdi)\n\t"
 "movq %r15,56(%rdi)\n\t"
-"retq"
+"retq\n\t"
+
+"_swap64v2:\n\t"
+"movq %rdi,16(%rdi) \n\t"
+"movq %rbx,24(%rdi) \n\t"
+"movq %rbp,32(%rdi) \n\t"
+"movq %r12,40(%rdi) \n\t"
+"movq %r13,48(%rdi) \n\t"
+"movq %r14,56(%rdi) \n\t"
+"movq %r15,64(%rdi) \n\t"
+
+"movq %rsp,(%rdi) \n\t" // old_co->stack = %rsp
+"movq (%rsi),%rsp \n\t" // %rsp = new_co->stack
+
+
+"movq %rdi,72(%rsi) \n\t" // save caller coroutine
+"movq 64(%rsi),%r15 \n\t"
+"movq 56(%rsi),%r14 \n\t"
+"movq 48(%rsi),%r13 \n\t"
+"movq 40(%rsi),%r12 \n\t"
+"movq 32(%rsi),%rbp \n\t"
+"movq 24(%rsi),%rbx \n\t"
+"movq 16(%rsi),%rdi \n\t"
+//"popq %rdi \n\t"
+//"addq $8,%rsp \n\t"
+//"jmpq *-8(%rsp) \n\t"
+"retq \n\t"
+
+"_swapback:\n\t"
+"movq 72(%rdi),%rsi\n\t"
+"jmp _swap64v2\n\t"
+
+"__co_end:\n\t"
+"movq 72(%rdi),%rsi\n\t"
+"movq (%rsi),%rsp \n\t" // %rsp = new_co->stack
+
+"movq 64(%rsi),%r15 \n\t"
+"movq 56(%rsi),%r14 \n\t"
+"movq 48(%rsi),%r13 \n\t"
+"movq 40(%rsi),%r12 \n\t"
+"movq 32(%rsi),%rbp \n\t"
+"movq 24(%rsi),%rbx \n\t"
+"movq 16(%rsi),%rdi \n\t"
+"retq \n\t"
 );
 
 #endif //JOBLIB_ASYNC_HPP
