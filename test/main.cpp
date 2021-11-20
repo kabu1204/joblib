@@ -7,6 +7,40 @@ void save_image(){}
 coroutine *main_co;
 coroutine *sub_co;
 
+CO_STKLESS(co1)
+    //1: Declare local variables you need
+    int a,b,i;
+    //2: Declare function and implement it like this
+    CO_DEF(int, int c)  // function ProtoType
+        a=c;
+        std::cout<<a<<std::endl;
+        CO_RET(c);
+CO_DEF_END;         // be sure to CO_DEF_END at end
+
+CO_STKLESS(co2)
+    //1: Declare local variables you need
+    int a,b,i;
+    //2: Declare function and implement it like this
+    CO_DEF(int)  // function ProtoType
+        a= CO_AWAIT(co1,10);
+        std::cout<<"get from co1:"<<a<<std::endl;
+        CO_RET(a);
+CO_DEF_END;         // be sure to CO_DEF_END at end
+
+void test_for_co_stkless(){
+    co2 *p=new co2();
+    p->isRootCo=true;
+
+    stackless::async_task* task = new stackless::async_task(p);
+
+    stackless::event_loop_s* loop = new stackless::event_loop_s(task);
+    running_loop = loop;
+    running_loop->status = RUNNING;
+    running_loop->running_task_idx=0;
+
+    task->run();
+}
+
 void test_for_eventloop(){
     std::cin.tie(nullptr);
 //    sub_co = new coroutine([=](){
@@ -38,7 +72,7 @@ void test_for_eventloop(){
     clock_t end = std::clock();
     std::cout<<1000*1000*double(end-start)/CLOCKS_PER_SEC/num_co<<"us/co"<<std::endl;
 //    loop.join();
-//    event_loop l(sub_co);
+//    event_loop_s l(sub_co);
 }
 
 void test_for_coro(){
@@ -73,7 +107,7 @@ void test_for_async(){
 //        };
 //        vec.push_back(func);
 //    }
-//    event_loop<void()> loop(vec);
+//    event_loop_s<void()> loop(vec);
 }
 
 void test_for_parallel(){
@@ -161,7 +195,8 @@ R getRetValue(R(*)(Args...));
 int main(){
 //    auto a = [](int c){return 1;};
 //    using ret_t = decltype(getRetValue(coro_entry));
-    test_for_eventloop();
+test_for_co_stkless();
+//    test_for_eventloop();
 //    test_for_coro();
 //    test_for_async();
 //    test_for_parallel();

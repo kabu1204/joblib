@@ -10,4 +10,4 @@ include_directories(${INC_DIR})
 link_directories(${LINK_DIR})
 #link_libraries(tbox)
 
-add_library(joblib SHARED library.cpp parallel/range.cpp parallel/async_stackless.cpp ../include/easylogging/easylogging++.cc)
+add_library(joblib SHARED library.cpp parallel/range.cpp ../include/easylogging/easylogging++.cc)

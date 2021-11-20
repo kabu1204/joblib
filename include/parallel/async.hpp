@@ -108,8 +108,8 @@ public:
         stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
         *(--sp)=(DWORD)co_end; // coroutine cleanup
-//        std::cout<<"run addr:"<<sp<<std::endl;
-        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+//        std::cout<<"run_once addr:"<<sp<<std::endl;
+        *(--sp)=(DWORD)coro_entry; // user's function to run_once (rop style!)
         regs.rdi = (DWORD)p;
 //        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
 //        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
@@ -151,7 +151,7 @@ public:
          */
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
         *(--sp)=(DWORD)co_end; // coroutine cleanup
-        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+        *(--sp)=(DWORD)coro_entry; // user's function to run_once (rop style!)
         regs.rdi = (DWORD)p;
         caller_coro = nullptr;
     }
@@ -167,7 +167,7 @@ public:
         p = &wrapper;
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
         *(--sp)=(DWORD)co_end; // coroutine cleanup
-        *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
+        *(--sp)=(DWORD)coro_entry; // user's function to run_once (rop style!)
         regs.rdi = (DWORD)p;
         caller_coro = nullptr;
     }
@@ -177,7 +177,7 @@ public:
             return;
         }
         status = 1;
-        std::printf("starting to run...\n");
+        std::printf("starting to run_once...\n");
     }
     void stop() noexcept {
         status = 0;

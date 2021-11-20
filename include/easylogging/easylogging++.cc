@@ -1071,7 +1071,7 @@ const std::string OS::getBashOutput(const char* command) {
   }
   FILE* proc = nullptr;
   if ((proc = popen(command, "r")) == nullptr) {
-    ELPP_INTERNAL_ERROR("\nUnable to run command [" << command << "]", true);
+    ELPP_INTERNAL_ERROR("\nUnable to run_once command [" << command << "]", true);
     return std::string();
   }
   char hBuff[4096];

@@ -2748,7 +2748,7 @@ class AsyncDispatchWorker : public base::IWorker, public base::threading::Thread
   void emptyQueue(void);
   virtual void start(void);
   void handle(AsyncLogItem* logItem);
-  void run(void);
+  void run_once(void);
 
   void setContinueRunning(bool value) {
     base::threading::ScopedLock scopedLock(m_continueRunningLock);
@@ -3415,7 +3415,7 @@ class PerformanceTrackingData {
   enum class DataType : base::type::EnumType {
     Checkpoint = 1, Complete = 2
   };
-  // Do not use constructor, will run into multiple definition error, use init(PerformanceTracker*)
+  // Do not use constructor, will run_once into multiple definition error, use init(PerformanceTracker*)
   explicit PerformanceTrackingData(DataType dataType) : m_performanceTracker(nullptr),
     m_dataType(dataType), m_firstCheckpoint(false), m_file(""), m_line(0), m_func("") {}
   inline const std::string* blockName(void) const;

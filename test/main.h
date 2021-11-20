@@ -6,6 +6,7 @@
 #include "parallel/generator.hpp"
 #include "parallel/threadpool.hpp"
 #include "parallel/async.hpp"
+#include "parallel/async_stackless.h"
 
 #include "iostream"
 #include "string"
