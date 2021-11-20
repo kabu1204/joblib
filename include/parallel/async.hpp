@@ -4,9 +4,9 @@
 
 #ifndef JOBLIB_ASYNC_HPP
 #define JOBLIB_ASYNC_HPP
-#define DEFAULT_CORO_STACK_SIZE 1024*4
+#define DEFAULT_CORO_STACK_SIZE 1024*256   // default:256KByte，aligned: 8Byte ~int array of size 32000
+#define STACKFUL 1
 #define MAX_COROUTINES_PER_LOOP 1024
-#define MAIN_CORO 0
 #define ALLOW_NESTED_ASYNC 0    // allow to create a new event loop in a running event loop
 #include "thread"
 #include "string"
@@ -14,6 +14,7 @@
 #include "cstdio"
 #include "csetjmp"
 #include "iostream"
+#include "types.h"
 
 
 int p(int x){std::printf("saving env %d\n",x); return x;};
@@ -27,11 +28,6 @@ int p2(int x){std::printf("jumping env %d\n",x); return x;};
         longjmp(envs[p2(running_coro)], a);      \
     } \
     else envs_state[running_coro]=0;
-
-typedef int64_t DWORD;
-typedef int32_t LWORD;
-typedef int16_t DBYTE;
-typedef int8_t BYTE;
 
 class coroutine;
 class event_loop;
@@ -61,19 +57,31 @@ struct coroutine_registers
     }
 };
 
-void co_end(){
-    // TODO: do cleaning job
-
-    _co_end(running_coro);
-}
+void co_end();
 
 void co_yield();
 
 void coro_entry(std::function<void()>* f){
-    std::cout<<"this is a coro_entry\n";
+//    std::cout<<"this is a coro_entry\n";
     (*f)();
-    std::cout<<"exiting coro_entry...\n";
+//    std::cout<<"exiting coro_entry...\n";
     co_end();
+}
+
+
+template<typename F, typename... Arg>
+std::enable_if_t<std::is_same<void, typename std::result_of<F(Arg...)>::type>::value, std::function<void()>>
+getWrapper(F&& _function, Arg&&... args) {
+    using ret_type = typename std::result_of<F(Arg...)>::type;
+    auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
+    auto task = std::make_shared<std::packaged_task<ret_type()>>(func);
+    std::future<ret_type> res = task->get_future();
+    auto wrapper = [&](){};
+    return true;
+}
+template<typename T>
+std::enable_if_t<!std::is_same<void, T>::value, std::function<T()>> isVoid() {
+    return false;
 }
 
 class coroutine{
@@ -84,7 +92,7 @@ public:
     coroutine *caller_coro;
     std::function<void()> wrapper;
     std::function<void()>* p;
-public:
+
     coroutine(){
         sp=0;
         stack_space=0;
@@ -94,37 +102,47 @@ public:
 
     template<typename F, typename... Arg>
     coroutine(F&& _function, Arg&&... args){
-        using ret_type = typename std::result_of<F(Arg...)>::type;
-        auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
-        auto task = std::make_shared<std::packaged_task<ret_type()>>(func);
-        std::future<ret_type> res = task->get_future();
-        if(std::is_same<void, ret_type>::value){
-            // 无返回值
-            wrapper = [&](){
-                status=1;
-                func();
-                status=0;
-            };
-        }
-        else{
-            // 有返回值
-            wrapper = [&](){
-                status=1;
-                func();
-                status=0;
-            };
-        }
 
+        getWrapper<F, Arg...>(std::forward<F>(_function), std::forward<Arg>(args)...);
         p = &wrapper;
         stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
         *(--sp)=(DWORD)co_end; // coroutine cleanup
-        std::cout<<"run addr:"<<sp<<std::endl;
+//        std::cout<<"run addr:"<<sp<<std::endl;
         *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
         regs.rdi = (DWORD)p;
-        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
-        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
+//        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
+//        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
         caller_coro = nullptr;
+    }
+
+    template<typename F, typename... Arg>
+    std::enable_if_t<std::is_same<void, typename std::result_of<F(Arg...)>::type>::value, void> getWrapper(F&& _function, Arg&&... args) {
+        using ret_type = typename std::result_of<F(Arg...)>::type;
+        auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
+        auto task = std::make_shared<std::packaged_task<ret_type()>>(func);
+        std::future<ret_type> res = task->get_future();
+        wrapper = [&](){
+            status=1;
+            func();
+            status=0;
+        };
+        return;
+    }
+
+    template<typename F, typename... Arg>
+    std::enable_if_t<!std::is_same<void, typename std::result_of<F(Arg...)>::type>::value, void> getWrapper(F&& _function, Arg&&... args) {
+        using ret_type = typename std::result_of<F(Arg...)>::type;
+        auto func = std::bind(std::forward<F>(_function), std::forward<Arg>(args)...);
+        auto task = std::make_shared<std::packaged_task<ret_type()>>(func);
+        std::future<ret_type> res = task->get_future();
+        wrapper = [&](){
+            status=1;
+            ret_type ret = func();
+            status=0;
+            return ret;
+        };
+        return;
     }
 
     void reset(){
@@ -174,6 +192,12 @@ private:
     int status; // 0 for not started; 1 for running; 2 for suspended;
 };
 
+void co_end(){
+    // TODO: reset
+    _co_end(running_coro);
+//    running_coro->reset();
+}
+
 //template<typename F>
 class event_loop{
 public:
@@ -198,6 +222,10 @@ public:
         run_until_complete(run_in_current_thread);
     }
     int run_until_complete(bool run_in_current_thread=true){
+        if(!ALLOW_NESTED_ASYNC && curr_event_loop!=nullptr && curr_event_loop!=this){
+            std::cerr<<"Nested asyncio is NOT ALLOWED.\n";
+            return -1;
+        }
         if(coros.empty()){
             return -1;
         }
@@ -220,6 +248,7 @@ public:
             t_loop = new std::thread(f_loop);
 //            t_loop.detach();
         }
+        return 0;
     }
     coroutine* scheduler(){
         auto nxt_co = coros.front();
@@ -227,7 +256,7 @@ public:
         return nxt_co;
     }
     bool is_running(){ return running; }
-    bool join(){ if(t_loop != nullptr){t_loop->join();}}
+    bool join(){ if(t_loop != nullptr){t_loop->join();return true;}return false;}
 private:
     std::queue<coroutine*> coros;
     coroutine* local_coro;
@@ -239,7 +268,7 @@ void co_yield(){
     /*
      * TODO: 改成get_running_loop实现，减少thread local变量
      */
-    std::cout<<"running_coro:"<<running_coro<<std::endl;
+//    std::cout<<"running_coro:"<<running_coro<<std::endl;
     swapback(running_coro);
 }
 
@@ -265,6 +294,7 @@ bool set_event_loop(event_loop* loop){
      * TODO
      */
     curr_event_loop = loop;
+    return true;
 }
 
 /**
