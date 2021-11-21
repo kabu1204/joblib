@@ -8,6 +8,8 @@
 #define STACKFUL 1
 #define MAX_COROUTINES_PER_LOOP 1024
 #define ALLOW_NESTED_ASYNC 0    // allow to create a new event loop in a running event loop
+#define __aarch64__
+#undef __x86_64__
 #include "thread"
 #include "string"
 #include "chrono"
@@ -59,6 +61,7 @@ struct coroutine_registers
     }
 #endif
 #ifdef __aarch64__
+    DWORD d8,d9;
     DWORD d10, d11;
     DWORD d12, d13;
     DWORD d14, d15;
@@ -67,9 +70,12 @@ struct coroutine_registers
     DWORD x23, x24;
     DWORD x25, x26;
     DWORD x27, x28;
-    DWORD x29, x30;
+    DWORD x29;
+    DWORD x30;
+    DWORD x0;
 //    DWORD lr;
     coroutine_registers(){
+        d8=d9=0;
         d10=d11=0;
         d12=d13=0;
         d14=d15=0;
@@ -79,6 +85,7 @@ struct coroutine_registers
         x25=x26=0;
         x27=x28=0;
         x29=x30=0;
+        x0=0;
     }
 #endif
 };
@@ -139,7 +146,11 @@ public:
         regs.rdi = (DWORD)p;
 #endif
 #ifdef __aarch64__
-        
+        std::cout<<"addr of co:"<<this<<std::endl;
+        std::cout<<"addr of regs.d8:"<<&regs.d8<<std::endl;
+        std::cout<<"addr of regs.x30:"<<&regs.x30<<std::endl;
+        regs.x30=(DWORD)coro_entry;
+        regs.x0=(DWORD)p;
 #endif
 //        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
 //        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
@@ -180,9 +191,15 @@ public:
          * TODO: reset stack size
          */
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
+#ifdef __x86_64__
         *(--sp)=(DWORD)co_end; // coroutine cleanup
         *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
         regs.rdi = (DWORD)p;
+#endif
+#ifdef __aarch64__
+        regs.x30=(DWORD)coro_entry;
+        regs.x0=(DWORD)p;
+#endif
         caller_coro = nullptr;
     }
     template<typename F, typename... Arg>
@@ -196,9 +213,15 @@ public:
         };
         p = &wrapper;
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)-1]; // top of stack
+#ifdef __x86_64__
         *(--sp)=(DWORD)co_end; // coroutine cleanup
         *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
         regs.rdi = (DWORD)p;
+#endif
+#ifdef __aarch64__
+        regs.x30=(DWORD)coro_entry;
+        regs.x0=(DWORD)p;
+#endif
         caller_coro = nullptr;
     }
     void run() noexcept{
@@ -425,80 +448,88 @@ __asm__(
 #endif
 #ifdef __aarch64__
 __asm__(
-".global _swap64 \n\t"
-".global __save_ctx\n\t"
-".global _swap64v2\n\t"
-".global _swapback\n\t"
-".global __co_end\n\t"
-"_swap64: \n\t"
-"_swap64v2: \n\t"
-"__save_ctx: \n\t"
-"stp d8, d9, [x0, 0x10]\n\t"
-"stp d10, d11, [x0, 0x20]\n\t"
-"stp d12, d13, [x0, 0x30]\n\t"
-"stp d14, d15, [x0, 0x40]\n\t"
-"stp x19, x20, [x0, 0x50]\n\t"
-"stp x21, x22, [x0, 0x60]\n\t"
-"stp x23, x24, [x0, 0x70]\n\t"
-"stp x25, x26, [x0, 0x80]\n\t"
-"stp x27, x28, [x0, 0x90]\n\t"
-"stp x29, x30, [x0, 0xa0]\n\t"
-"str x0, [x0, 0xa8]\n\t"
+".global swap64 \n\t"
+".global _save_ctx\n\t"
+".global swap64v2\n\t"
+".global swapback\n\t"
+".global _co_end\n\t"
+"swap64: \n\t"
+"ret\n\t"
+"_save_ctx: \n\t"
+"ret\n\t"
+
+"swap64v2: \n\t"
+"add x19,x19,#998\n\t"
+"stp d8, d9, [x0, #0x10]\n\t"
+"stp d10, d11, [x0, #0x20]\n\t"
+"stp d12, d13, [x0, #0x30]\n\t"
+"stp d14, d15, [x0, #0x40]\n\t"
+"stp x19, x20, [x0, #0x50]\n\t"
+"stp x21, x22, [x0, #0x60]\n\t"
+"stp x23, x24, [x0, #0x70]\n\t"
+"stp x25, x26, [x0, #0x80]\n\t"
+"stp x27, x28, [x0, #0x90]\n\t"
+"stp x29, x30, [x0, #0xa0]\n\t"  //x30由swap64v2的caller设置，存的是swap64v2的下一条指令的地址
+"stp x0, x0,[x0, #0xb0]\n\t"
+//"str x0, [x0, 0xa8]\n\t"    // 保存caller coroutine的地址
 
 // Save return address
-//"str x30, [sp, 0x00]\n\t"
+//"sub sp,sp,#8\n\t"
+//"str x30, [sp, 0x08]\n\t"
 
 //# Save stack pointer to x0 (first argument)
 "mov x2, sp\n\t"
-"str x2, [x0, 0]\n\t"
+"str x2, [x0, #0]\n\t"
 
 //# Load stack pointer from x1 (second argument)
-"ldr x3, [x1, 0]\n\t"
+"ldr x3, [x1, #0]\n\t"
 "mov sp, x3\n\t"
 
 //# Restore caller registers
-"ldp d8, d9, [x1, 0x10]\n\t"
-"ldp d10, d11, [x1, 0x20]\n\t"
-"ldp d12, d13, [x1, 0x30]\n\t"
-"ldp d14, d15, [x1, 0x40]\n\t"
-"ldp x19, x20, [x1, 0x50]\n\t"
-"ldp x21, x22, [x1, 0x60]\n\t"
-"ldp x23, x24, [x1, 0x70]\n\t"
-"ldp x25, x26, [x1, 0x80]\n\t"
-"ldp x27, x28, [x1, 0x90]\n\t"
-"ldp x29, x30, [x1, 0xa0]\n\t"
+"ldp d8, d9, [x1, #0x10]\n\t"
+"ldp d10, d11, [x1, #0x20]\n\t"
+"ldp d12, d13, [x1, #0x30]\n\t"
+"ldp d14, d15, [x1, #0x40]\n\t"
+"ldp x19, x20, [x1, #0x50]\n\t"
+"ldp x21, x22, [x1, #0x60]\n\t"
+"ldp x23, x24, [x1, #0x70]\n\t"
+"ldp x25, x26, [x1, #0x80]\n\t"
+"ldp x27, x28, [x1, #0x90]\n\t"
+"ldp x29, x30, [x1, #0xa0]\n\t"
+"ldr x0, [x0, #0xa8]\n\t"
 
 //# Load return address into x4
-//"ldr x4, [sp, 0xa0]\n\t"
+//"ldr x4, [sp, 0x08]\n\t"
 
 //# Pop stack frame
-//"add sp, sp, 0xb0\n\t"
+//"add sp,sp,#8\n\t"
 
 //# Jump to return address (in x4)
-"ret x30\n\t"
+"ret\n\t"
 
-"__co_end: \n\t"
-"ldr x1, [x0, 0xa8]\n\t"
+"_co_end: \n\t"
+"ldr x1, [x0, #0xb0]\n\t"
 //# Load stack pointer from x1
-"ldr x3, [x1, 0]\n\t"
+"ldr x3, [x1, #0]\n\t"
 "mov sp, x3\n\t"
 
 //# Restore caller registers
-"ldp d8, d9, [x1, 0x10]\n\t"
-"ldp d10, d11, [x1, 0x20]\n\t"
-"ldp d12, d13, [x1, 0x30]\n\t"
-"ldp d14, d15, [x1, 0x40]\n\t"
-"ldp x19, x20, [x1, 0x50]\n\t"
-"ldp x21, x22, [x1, 0x60]\n\t"
-"ldp x23, x24, [x1, 0x70]\n\t"
-"ldp x25, x26, [x1, 0x80]\n\t"
-"ldp x27, x28, [x1, 0x90]\n\t"
-"ldp x29, x30, [x1, 0xa0]\n\t"
-"ret x30\n\t"
+"ldp d8, d9, [x1, #0x10]\n\t"
+"ldp d10, d11, [x1, #0x20]\n\t"
+"ldp d12, d13, [x1, #0x30]\n\t"
+"ldp d14, d15, [x1, #0x40]\n\t"
+"ldp x19, x20, [x1, #0x50]\n\t"
+"ldp x21, x22, [x1, #0x60]\n\t"
+"ldp x23, x24, [x1, #0x70]\n\t"
+"ldp x25, x26, [x1, #0x80]\n\t"
+"ldp x27, x28, [x1, #0x90]\n\t"
+"ldp x29, x30, [x1, #0xa0]\n\t"
+"ldr x0, [x1, #0xa8]\n\t"
+"ret\n\t"
 
-"_swapback: \n\t"
-"ldr x1, [x0, 0xa8]\n\t"
-"b _swap64v2\n\t"
+"swapback: \n\t"
+"ldr x1, [x0, #0xb0]\n\t"
+"b swap64v2\n\t"
 );
 #endif
 

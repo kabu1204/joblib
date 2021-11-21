@@ -21,14 +21,14 @@ void test_for_eventloop(){
     clock_t start = std::clock();
     std::queue<coroutine*> vec;
     coroutine *new_co;
-    int num_co=10240;
+    int num_co=2;
     for(int i=0;i<num_co;++i){
         new_co = new coroutine([=](){
-            int a[32000];
-//            std::cout<<"\tin co"<<i<<" first"<<std::endl;
-//            std::cout<<"saved caller's coro:"<<running_coro->caller_coro<<std::endl;
+            int a[32];
+            std::cout<<"\tin co"<<i<<" first"<<std::endl;
+            std::cout<<"saved caller's coro:"<<running_coro->caller_coro<<std::endl;
             co_yield();
-//            std::cout<<"\tin co"<<i<<" twice"<<std::endl;
+            std::cout<<"\tin co"<<i<<" twice"<<std::endl;
             co_yield();
             return 1;
         });

@@ -12,6 +12,7 @@ include_directories(${INC_DIR})
 link_directories(${LINK_DIR} "../cmake-build-debug")
 #link_libraries(tbox)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
 add_executable(test main.cpp main.h)
 target_link_libraries(test joblib)
