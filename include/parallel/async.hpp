@@ -41,8 +41,10 @@ extern "C" void swapback(coroutine *curr_co);
 extern "C" void _co_end(coroutine *curr_co);
 extern "C" void _save_ctx(coroutine *coro);    // 保存相关的CPU寄存器：rbx, rbp, r12-r15
 
+
 struct coroutine_registers
 {
+#ifdef __x86_64__
     DWORD rdi;
     DWORD rbx;
     DWORD rbp;
@@ -55,6 +57,30 @@ struct coroutine_registers
         rbx=0;rbp=0;
         r12=0;r13=0;r14=0;r15=0;
     }
+#endif
+#ifdef __aarch64__
+    DWORD d10, d11;
+    DWORD d12, d13;
+    DWORD d14, d15;
+    DWORD x19, x20;
+    DWORD x21, x22;
+    DWORD x23, x24;
+    DWORD x25, x26;
+    DWORD x27, x28;
+    DWORD x29, x30;
+//    DWORD lr;
+    coroutine_registers(){
+        d10=d11=0;
+        d12=d13=0;
+        d14=d15=0;
+        x19=x20=0;
+        x21=x22=0;
+        x23=x24=0;
+        x25=x26=0;
+        x27=x28=0;
+        x29=x30=0;
+    }
+#endif
 };
 
 void co_end();
@@ -107,10 +133,14 @@ public:
         p = &wrapper;
         stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
+#ifdef __x86_64__
         *(--sp)=(DWORD)co_end; // coroutine cleanup
-//        std::cout<<"run addr:"<<sp<<std::endl;
         *(--sp)=(DWORD)coro_entry; // user's function to run (rop style!)
         regs.rdi = (DWORD)p;
+#endif
+#ifdef __aarch64__
+        
+#endif
 //        std::cout<<"addr of regs.rdi:"<<&(regs.rdi)<<std::endl;
 //        std::cout<<"addr of regs.rdx:"<<&(regs.rbx)<<std::endl;
         caller_coro = nullptr;
@@ -310,7 +340,7 @@ bool set_event_loop(event_loop* loop){
  * "retq" = "popq %rip" 或者 "addq $8,%rsp; jmpq *-8(%rsp)"
  * "call" = "pushq 8(%rip)" 将下一条指令压栈
  */
-
+#ifdef __x86_64__
 __asm__(
 ".globl _swap64 \n\t"
 ".globl __save_ctx\n\t"
@@ -392,5 +422,84 @@ __asm__(
 "movq 16(%rsi),%rdi \n\t"
 "retq \n\t"
 );
+#endif
+#ifdef __aarch64__
+__asm__(
+".global _swap64 \n\t"
+".global __save_ctx\n\t"
+".global _swap64v2\n\t"
+".global _swapback\n\t"
+".global __co_end\n\t"
+"_swap64: \n\t"
+"_swap64v2: \n\t"
+"__save_ctx: \n\t"
+"stp d8, d9, [x0, 0x10]\n\t"
+"stp d10, d11, [x0, 0x20]\n\t"
+"stp d12, d13, [x0, 0x30]\n\t"
+"stp d14, d15, [x0, 0x40]\n\t"
+"stp x19, x20, [x0, 0x50]\n\t"
+"stp x21, x22, [x0, 0x60]\n\t"
+"stp x23, x24, [x0, 0x70]\n\t"
+"stp x25, x26, [x0, 0x80]\n\t"
+"stp x27, x28, [x0, 0x90]\n\t"
+"stp x29, x30, [x0, 0xa0]\n\t"
+"str x0, [x0, 0xa8]\n\t"
+
+// Save return address
+//"str x30, [sp, 0x00]\n\t"
+
+//# Save stack pointer to x0 (first argument)
+"mov x2, sp\n\t"
+"str x2, [x0, 0]\n\t"
+
+//# Load stack pointer from x1 (second argument)
+"ldr x3, [x1, 0]\n\t"
+"mov sp, x3\n\t"
+
+//# Restore caller registers
+"ldp d8, d9, [x1, 0x10]\n\t"
+"ldp d10, d11, [x1, 0x20]\n\t"
+"ldp d12, d13, [x1, 0x30]\n\t"
+"ldp d14, d15, [x1, 0x40]\n\t"
+"ldp x19, x20, [x1, 0x50]\n\t"
+"ldp x21, x22, [x1, 0x60]\n\t"
+"ldp x23, x24, [x1, 0x70]\n\t"
+"ldp x25, x26, [x1, 0x80]\n\t"
+"ldp x27, x28, [x1, 0x90]\n\t"
+"ldp x29, x30, [x1, 0xa0]\n\t"
+
+//# Load return address into x4
+//"ldr x4, [sp, 0xa0]\n\t"
+
+//# Pop stack frame
+//"add sp, sp, 0xb0\n\t"
+
+//# Jump to return address (in x4)
+"ret x30\n\t"
+
+"__co_end: \n\t"
+"ldr x1, [x0, 0xa8]\n\t"
+//# Load stack pointer from x1
+"ldr x3, [x1, 0]\n\t"
+"mov sp, x3\n\t"
+
+//# Restore caller registers
+"ldp d8, d9, [x1, 0x10]\n\t"
+"ldp d10, d11, [x1, 0x20]\n\t"
+"ldp d12, d13, [x1, 0x30]\n\t"
+"ldp d14, d15, [x1, 0x40]\n\t"
+"ldp x19, x20, [x1, 0x50]\n\t"
+"ldp x21, x22, [x1, 0x60]\n\t"
+"ldp x23, x24, [x1, 0x70]\n\t"
+"ldp x25, x26, [x1, 0x80]\n\t"
+"ldp x27, x28, [x1, 0x90]\n\t"
+"ldp x29, x30, [x1, 0xa0]\n\t"
+"ret x30\n\t"
+
+"_swapback: \n\t"
+"ldr x1, [x0, 0xa8]\n\t"
+"b _swap64v2\n\t"
+);
+#endif
 
 #endif //JOBLIB_ASYNC_HPP
