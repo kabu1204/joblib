@@ -75,6 +75,16 @@ T co::get() {
 template<>
 void co::get() {/*do nothing*/}
 
+template<class T>
+T co::next(T content){
+    return *(T*)_res_;
+}
+
+template<class T>
+void co::_yield(T ret){
+    *reinterpret_cast<decltype(ret)*>(_res_)=ret;
+}
+
 
 // TODO: 返回值的存储，指针类型的转换，调用派生类函数
 CO_STKLESS(co_example)

@@ -48,10 +48,11 @@ struct name:public stackless::co{ \
 
 #define CO_YIELD(ret)        \
 co_v_state=__COUNTER__+2;    \
-*reinterpret_cast<decltype(ret)*>(_res_)=ret; \
-co_v_status=SUSPENDED;                             \
-return;                 \
+_yield<ret_type>(ret); \
+co_v_status=SUSPENDED;       \
+return;                     \
 case __COUNTER__+1:;         \
+
 
 #define CO_RET(ret)     \
 co_v_state=0;           \
@@ -114,6 +115,12 @@ namespace stackless {
         T get();
 
         void clean();
+
+        template<class T>
+        T next(T content);
+
+        template<class T>
+        void _yield(T ret);
     };
 
     /**
@@ -179,6 +186,8 @@ namespace stackless {
     ret_type _co_await(co* new_co, Arg... args);
 
     void _co_await(co* new_co);
+
+    void _co_yield(co* new_co);
 
     void co_end();
 
