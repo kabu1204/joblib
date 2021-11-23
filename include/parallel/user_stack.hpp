@@ -63,7 +63,7 @@ extern "C" void switch_user_context(user_stack* src_stack, user_stack* dst_stack
 
 #ifdef __x86_64__
 __asm__(
-".globl _switch_user_context"
+".globl _switch_user_context\n\t"
 "_switch_user_context:\n\t"
 "movq %rdi,16(%rdi) \n\t"
 "movq %rbx,24(%rdi) \n\t"

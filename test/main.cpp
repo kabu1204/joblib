@@ -11,11 +11,11 @@ CO_STKLESS(co1)
     //1: Declare local variables you need
     int a,b,i;
     //2: Declare function and implement it like this
-    CO_DEF(int, int c)  // function ProtoType
-        a=c;
-        std::cout<<a<<std::endl;
-        CO_RET(c);
-CO_DEF_END;         // be sure to CO_DEF_END at end
+CO_DEF(int, int c)  // function ProtoType
+    a=c;
+    std::cout<<a<<std::endl;
+    CO_RET(c);
+DEF_END;         // be sure to DEF_END at end
 
 CO_STKLESS(co2)
     //1: Declare local variables you need
@@ -25,7 +25,25 @@ CO_STKLESS(co2)
         a= CO_AWAIT(co1,10);
         std::cout<<"get from co1:"<<a<<std::endl;
         CO_RET(a);
-CO_DEF_END;         // be sure to CO_DEF_END at end
+DEF_END;         // be sure to DEF_END at end
+
+GEN_STKLESS(gen1,int,int)
+int i;
+int b;
+    GEN_DEF(int c)
+        for(i=0;i<10;++i){
+            CO_YIELD(i,b);
+//            std::cout<<b<<std::endl;
+        }
+DEF_END;
+
+void test_for_gen_stkless(){
+    gen1 g;
+    g(1);
+    for(auto i:Range(20)){
+        std::cout<<g.next()<<std::endl;
+    }
+}
 
 void test_for_co_stkless(){
     co2 *p=new co2();
@@ -195,7 +213,8 @@ R getRetValue(R(*)(Args...));
 int main(){
 //    auto a = [](int c){return 1;};
 //    using ret_t = decltype(getRetValue(coro_entry));
-test_for_co_stkless();
+//test_for_co_stkless();
+test_for_gen_stkless();
 //    test_for_eventloop();
 //    test_for_coro();
 //    test_for_async();

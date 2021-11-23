@@ -75,29 +75,37 @@ T co::get() {
 template<>
 void co::get() {/*do nothing*/}
 
-template<class T>
-T co::next(T content){
-    return *(T*)_res_;
+template<class RET_T, class RECV_T>
+RET_T generator_s<RET_T, RECV_T>::next() {
+    _f();
+    return *(RET_T*)_res_;
 }
 
-template<class T>
-void co::_yield(T ret){
-    *reinterpret_cast<decltype(ret)*>(_res_)=ret;
+template<class RET_T, class RECV_T>
+RET_T generator_s<RET_T, RECV_T>::send(RET_T content){
+    *reinterpret_cast<RECV_T*>(_recv_)=content;
+    _f();
+    return *(RET_T*)_res_;
+}
+
+template<class RET_T, class RECV_T>
+void generator_s<RET_T, RECV_T>::_yield(RET_T ret){
+    *reinterpret_cast<RET_T*>(_res_)=ret;
 }
 
 
 // TODO: 返回值的存储，指针类型的转换，调用派生类函数
-CO_STKLESS(co_example)
+GEN_STKLESS(co_example, int, int)
     //1: Declare local variables you need
     int a,b,i;
     //2: Declare function and implement it like this
-    CO_DEF(int, int c)  // function ProtoType
+    GEN_DEF(int c)  // function ProtoType
         a=c;            // DO NOT USE parameters directly, it will not be saved; save it in a local variable;
         for(i=0;i<=10;++i) {
-            CO_YIELD(i);       // yield wherever you need to
+            CO_YIELD(i,b);       // yield wherever you need to
         }
         CO_RET(11);     // return value
-CO_DEF_END;         // be sure to CO_DEF_END at end
+DEF_END;         // be sure to DEF_END at end
 
 
 stackless::async_task::async_task(stackless::co *co) {

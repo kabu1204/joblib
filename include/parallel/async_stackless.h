@@ -39,20 +39,41 @@ struct name:public stackless::co{ \
     case 0:                          \
         _res_=(RET_TYPE*)malloc(sizeof(RET_TYPE));             \
 
-#define CO_DEF_END } \
+
+#define GEN_STKLESS(name, RET_TYPE, RECV_TYPE,...) \
+struct name:public stackless::generator_s<RET_TYPE, RECV_TYPE>{ \
+    using ret_type = RET_TYPE;  \
+    using recv_type = RECV_TYPE;                  \
+    name(__VA_ARGS__):stackless::generator_s<RET_TYPE, RECV_TYPE>(__VA_ARGS__){  \
+        fp=union_cast<void*>(&name::_co_func_);    \
+    }                                               \
+    template<class... Arg>                          \
+    void operator() (Arg... args){                                  \
+        _f=std::bind(&name::_co_func_, this, args...);      \
+    }
+
+#define GEN_DEF(...) \
+    void _co_func_ ( __VA_ARGS__ ){ \
+    co_v_status=RUNNING;                        \
+    switch(co_v_state){                 \
+    case 0:                          \
+        _res_=(ret_type*)malloc(sizeof(ret_type)); \
+
+
+#define DEF_END } \
 }                    \
 };\
 
 #define CO_AWAIT(new_co, ...) _co_await<new_co::ret_type>(new new_co(), ##__VA_ARGS__ )
 
 
-#define CO_YIELD(ret)        \
+#define CO_YIELD(ret, recv) \
 co_v_state=__COUNTER__+2;    \
-_yield<ret_type>(ret); \
+_yield(ret); \
 co_v_status=SUSPENDED;       \
 return;                     \
-case __COUNTER__+1:;         \
-
+case __COUNTER__+1:;        \
+recv=_recv_;
 
 #define CO_RET(ret)     \
 co_v_state=0;           \
@@ -116,13 +137,28 @@ namespace stackless {
 
         void clean();
 
-        template<class T>
-        T next(T content);
-
-        template<class T>
-        void _yield(T ret);
     };
 
+    template<class RET_T, class RECV_T>
+    struct generator_s:public co{
+        using ret_type = RET_T;
+        using recv_type = RECV_T;
+        std::function<void()> _f;
+    public:
+        RECV_T _recv_;
+
+        std::function<void()> wrapper;
+
+        generator_s():co(){
+//            _args_ = std::make_tuple(args...);
+        }
+
+        RET_T next();
+
+        RET_T send(RET_T content);
+
+        void _yield(RET_T ret);
+    };
     /**
      * @brief 同一async_task的coroutine保证具有正确的关系
      */
