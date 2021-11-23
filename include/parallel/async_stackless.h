@@ -18,6 +18,7 @@
 #include <set>
 #include <utility>
 #include "types.h"
+#include "user_stack.hpp"
 #define DEFAULT_CORO_STACK_SIZE 1024*256
 #define SUSPENDED 0
 #define RUNNING 1
@@ -128,6 +129,7 @@ namespace stackless {
     public:
         stackless::co* root_co;
         stackless::co* running_co;
+        user_stack* stack;
 
         template<class... Arg>
         void run(Arg... args);
@@ -184,6 +186,7 @@ namespace stackless {
 
     void co_ret();
 
+    void loop_local_scheduler();
 }
 
 #include "async_stackless_impl.h"

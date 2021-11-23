@@ -97,6 +97,9 @@ stackless::async_task::async_task(stackless::co *co) {
         return;
     }
     root_co = co;
+
+    stack = new user_stack(DEFAULT_CORO_STACK_SIZE);
+    stack->push(loop_local_scheduler);
 }
 
 stackless::async_task::async_task(stackless::co *co, const char *name){
@@ -178,4 +181,8 @@ void stackless::_co_await(stackless::co* new_co) {
     // TODO:此时task已不是running状态，考虑是否有必要设置status和running_co
     // goto scheduler
     task->running_co=new_co;
+}
+
+void stackless::loop_local_scheduler(){
+    //TODO
 }
