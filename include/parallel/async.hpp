@@ -20,14 +20,14 @@
 int p(int x){std::printf("saving env %d\n",x); return x;};
 int p2(int x){std::printf("jumping env %d\n",x); return x;};
 
-#define yield(a) setjmp(envs[p(running_coro)]); \
-    if(envs_state[running_coro]==0) {           \
-        envs_state[running_coro]=1;             \
-        jmpable_coros.push(running_coro);        \
-        int t=running_coro; running_coro=waiting_coro; waiting_coro=t; \
-        longjmp(envs[p2(running_coro)], a);      \
-    } \
-    else envs_state[running_coro]=0;
+//#define yield(a) setjmp(envs[p(running_coro)]); \
+//    if(envs_state[running_coro]==0) {           \
+//        envs_state[running_coro]=1;             \
+//        jmpable_coros.push(running_coro);        \
+//        int t=running_coro; running_coro=waiting_coro; waiting_coro=t; \
+//        longjmp(envs[p2(running_coro)], a);      \
+//    } \
+//    else envs_state[running_coro]=0;
 
 class coroutine;
 class event_loop;

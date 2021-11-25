@@ -47,12 +47,12 @@ public:
     }
 
     template<class T>
-    void push(T content){
-        *(--sp)=(DWORD)content;
+    void pushq(T content){
+        *(--sp)=reinterpret_cast<DWORD>(content);
     }
 
     template<class T>
-    void pop(T& ret){
+    void popq(T& ret){
         ret=(T)(*sp);
         sp++;
     }
@@ -60,6 +60,7 @@ public:
 };
 
 extern "C" void switch_user_context(user_stack* src_stack, user_stack* dst_stack);
+extern "C" void _stack_clean(user_stack* stack);
 
 #ifdef __x86_64__
 __asm__(
@@ -86,6 +87,19 @@ __asm__(
 //"popq %rdi \n\t"
 //"addq $8,%rsp \n\t"
 //"jmpq *-8(%rsp) \n\t"
+"retq \n\t"
+
+"__stack_clean:\n\t"
+"movq 72(%rdi),%rsi\n\t"
+"movq (%rsi),%rsp \n\t" // %rsp = new_co->stack
+
+"movq 64(%rsi),%r15 \n\t"
+"movq 56(%rsi),%r14 \n\t"
+"movq 48(%rsi),%r13 \n\t"
+"movq 40(%rsi),%r12 \n\t"
+"movq 32(%rsi),%rbp \n\t"
+"movq 24(%rsi),%rbx \n\t"
+"movq 16(%rsi),%rdi \n\t"
 "retq \n\t"
 );
 #endif

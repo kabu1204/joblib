@@ -72,6 +72,10 @@ T co::get() {
     return *(T*)_res_;
 }
 
+void co::run_once_stdfunc() {
+    _f();
+}
+
 template<>
 void co::get() {/*do nothing*/}
 
@@ -117,7 +121,8 @@ stackless::async_task::async_task(stackless::co *co) {
     root_co = co;
 
     stack = new user_stack(DEFAULT_CORO_STACK_SIZE);
-    stack->push(loop_local_scheduler);
+    stack->regs.rdi=(DWORD)&co->_f;
+    stack->pushq(stackless::co_entry);
 }
 
 stackless::async_task::async_task(stackless::co *co, const char *name){
@@ -142,6 +147,9 @@ stackless::co* stackless::async_task::get_running_co(){
     return nullptr;
 }
 
+void stackless::async_task::scheduler() {
+    // used by co_gather();
+}
 
 /**
  * 从running_co切换至dst_co (调用)。该函数只应该由event_loop调用
@@ -156,11 +164,11 @@ bool stackless::async_task::switch_to(stackless::co* dst_co){
     return true;
 }
 
-template<class... Arg>
-void stackless::async_task::run(Arg... args){
+void stackless::async_task::run(){
     status=RUNNING;
     running_co=root_co;
-    root_co->run_once(args...);
+    curr_running_co=running_co;
+    root_co->run_once_stdfunc();
 }
 
 
@@ -180,11 +188,19 @@ ret_type stackless::_co_await(stackless::co* new_co, Arg... args) {
     stackless::co* old_co=task->get_running_co();
 
     new_co->mount_on(old_co);
-    // TODO:此时task已不是running状态，考虑是否有必要设置status和running_co
-    // goto scheduler
     task->running_co=new_co;
     old_co->co_v_status=SUSPENDED;
-    new_co->template run_once(args...);
+    uint8_t next_task = loop_local_scheduler();
+    if(next_task!=loop->running_task_idx){
+        task->status=SUSPENDED;
+        loop->running_task_idx=next_task;
+        switch_user_context(task->stack, loop->tasks[next_task]->stack);
+        // switch_to_next_task
+    }
+    // switched back or not switched at all
+    task->status=RUNNING;
+    curr_running_co=task->running_co;
+    new_co->run_once(args...);
     return new_co->get<ret_type>();
 }
 
@@ -199,8 +215,36 @@ void stackless::_co_await(stackless::co* new_co) {
     // TODO:此时task已不是running状态，考虑是否有必要设置status和running_co
     // goto scheduler
     task->running_co=new_co;
+    uint8_t next_task = loop_local_scheduler();
+    if(next_task!=loop->running_task_idx){
+        loop->running_task_idx=next_task;
+        // switch_to_next_task
+    }
+    // switched back or not switched at all
+    curr_running_co=task->running_co;
 }
 
-void stackless::loop_local_scheduler(){
+uint8_t stackless::loop_local_scheduler(){
     //TODO
+    stackless::event_loop_s* loop=stackless::get_running_loop();
+    uint8_t next_task_idx = (loop->running_task_idx+1)%loop->tasks.size();
+    return next_task_idx;
+}
+
+
+
+async_task* stackless::event_loop_s::get_running_task(){
+    if(status==RUNNING){
+        return tasks[running_task_idx];
+    }
+    std::cerr<<"There is no running task."<<std::endl;
+    return nullptr;
+};
+
+bool stackless::event_loop_s::run_until_complete(){
+    status=RUNNING;
+    running_loop=this;
+    running_task_idx = loop_local_scheduler();
+    switch_user_context(stack, tasks[running_task_idx]->stack);
+    return true;
 }

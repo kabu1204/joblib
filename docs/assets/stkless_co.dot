@@ -1,0 +1,6 @@
+digraph co {
+    co;
+    async_task;
+    event_loop;
+    co->async_task->event_loop;
+}

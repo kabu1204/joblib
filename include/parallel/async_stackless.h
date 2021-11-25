@@ -29,7 +29,12 @@
 struct name:public stackless::co{ \
     name():stackless::co(__VA_ARGS__){                 \
         fp=union_cast<void*>(&name::_co_func_);      \
-    }                         \
+    }                        \
+    template<class... Arg>                          \
+    void operator() (Arg... args){                                  \
+        _f=std::bind(&name::_co_func_, this, args...);      \
+    }\
+
 
 #define CO_DEF(RET_TYPE, ...) \
     using ret_type = RET_TYPE;              \
@@ -110,6 +115,7 @@ namespace stackless {
         uint32_t co_v_state;
         uint8_t co_v_state_cnt;
         void* fp;
+        std::function<void()> _f;
     public:
         void* _res_;
 
@@ -132,6 +138,8 @@ namespace stackless {
         template<class... Arg>
         void run_once(Arg... args);
 
+        void run_once_stdfunc();
+
         template<class T>
         T get();
 
@@ -143,7 +151,7 @@ namespace stackless {
     struct generator_s:public co{
         using ret_type = RET_T;
         using recv_type = RECV_T;
-        std::function<void()> _f;
+//        std::function<void()> _f;
     public:
         RECV_T _recv_;
 
@@ -159,29 +167,30 @@ namespace stackless {
 
         void _yield(RET_T ret);
     };
+
     /**
      * @brief 同一async_task的coroutine保证具有正确的关系
      */
     class async_task{
     private:
         char *task_name;
-        uint8_t status;
         friend class event_loop_s;
-
 
     public:
         stackless::co* root_co;
         stackless::co* running_co;
         user_stack* stack;
+        uint8_t status;
 
-        template<class... Arg>
-        void run(Arg... args);
+        void run();
 
         explicit async_task(stackless::co *co);
 
         async_task(stackless::co *co, const char *name);
 
         stackless::co* get_running_co();
+
+        void scheduler();
 
         bool switch_to(stackless::co* dst_co);
     };
@@ -190,27 +199,21 @@ namespace stackless {
     public:
         uint8_t status;
         std::vector<async_task*> tasks;
-        uint8_t running_task_idx;
+        uint8_t running_task_idx{0};
+        user_stack* stack;
 
-        event_loop_s(){}
+        event_loop_s(){stack=new user_stack(0);}
 
-        event_loop_s(async_task* task){tasks.push_back(task);}
+        event_loop_s(async_task* task){tasks.push_back(task);stack=new user_stack(0);}
 
         event_loop_s(std::vector<async_task*>::iterator begin, std::vector<async_task*>::iterator end){
             std::copy(begin, end, tasks.begin());
+            stack=new user_stack(0);
         }
 
-        async_task* get_running_task(){
-            if(status==RUNNING){
-                return tasks[running_task_idx];
-            }
-            std::cerr<<"There is no running task."<<std::endl;
-            return nullptr;
-        };
-        bool run_until_complete(){
+        async_task* get_running_task();
 
-            return false;
-        }
+        bool run_until_complete();
     };
 
     thread_local co* curr_running_co=nullptr;
@@ -231,7 +234,14 @@ namespace stackless {
 
     void co_ret();
 
-    void loop_local_scheduler();
+    uint8_t loop_local_scheduler();
+
+    void co_entry(std::function<void()>* f){
+//    std::cout<<"this is a coro_entry\n";
+        (*f)();
+//    std::cout<<"exiting coro_entry...\n";
+        co_end();
+    }
 }
 
 #include "async_stackless_impl.h"
