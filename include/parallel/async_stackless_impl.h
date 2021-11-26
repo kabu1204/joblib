@@ -53,6 +53,7 @@ void stackless::co::await(stackless::co *new_co){
 template<class... Arg>
 void stackless::co::run_once(Arg... args){
     __asm inline volatile(
+    "subq $8, %%rsp\n\t"
     "callq *%[cofunc]"
     ::[cofunc]"a"(fp)
     );
@@ -111,6 +112,9 @@ GEN_STKLESS(co_example, int, int)
         CO_RET(11);     // return value
 DEF_END;         // be sure to DEF_END at end
 
+void tt(){
+    std::cout<<"in tt()\n";
+}
 
 stackless::async_task::async_task(stackless::co *co) {
     if(!co->isRootCo){
@@ -120,9 +124,14 @@ stackless::async_task::async_task(stackless::co *co) {
     }
     root_co = co;
 
+    std::cout<<"Construct async_task\n";
     stack = new user_stack(DEFAULT_CORO_STACK_SIZE);
-    stack->regs.rdi=(DWORD)&co->_f;
-    stack->pushq(stackless::co_entry);
+//    _run = std::bind(&stackless::async_task::run,this);
+//    _prun=&_run;
+//    stack->regs.rdi=(DWORD)_prun;
+//    stack->pushq<void(std::function<void()>*)>(stackless::co_entry);
+//    stack->regs.rdi=(DWORD)tt;
+    stack->pushq<void()>(stackless::co_entry);
 }
 
 stackless::async_task::async_task(stackless::co *co, const char *name){
@@ -165,10 +174,11 @@ bool stackless::async_task::switch_to(stackless::co* dst_co){
 }
 
 void stackless::async_task::run(){
+    CDBG("in run\n");
     status=RUNNING;
     running_co=root_co;
     curr_running_co=running_co;
-    root_co->run_once_stdfunc();
+    root_co->run_once();
 }
 
 
@@ -190,52 +200,39 @@ ret_type stackless::_co_await(stackless::co* new_co, Arg... args) {
     new_co->mount_on(old_co);
     task->running_co=new_co;
     old_co->co_v_status=SUSPENDED;
-    uint8_t next_task = loop_local_scheduler();
-    if(next_task!=loop->running_task_idx){
-        task->status=SUSPENDED;
-        loop->running_task_idx=next_task;
-        switch_user_context(task->stack, loop->tasks[next_task]->stack);
+    async_task* next_task = loop_local_scheduler(task);
+    if(next_task!=task){
+        switch_user_context(task->stack, next_task->stack);
         // switch_to_next_task
     }
     // switched back or not switched at all
-    task->status=RUNNING;
     curr_running_co=task->running_co;
     new_co->run_once(args...);
     return new_co->get<ret_type>();
 }
 
-void stackless::_co_await(stackless::co* new_co) {
-    // TODO: status setting
-//    T* _new_co = static_cast<T*>(old_co);
+/**
+ * enqueue the old_task -> select next_task to run -> dequeue the next_task -> modify the status
+ * @param old_task pointer of old_task
+ * @return pointer of next_task
+ */
+async_task* stackless::loop_local_scheduler(async_task* old_task){
     stackless::event_loop_s* loop=stackless::get_running_loop();
-    stackless::async_task* task=loop->get_running_task();
-    stackless::co* src_co=task->get_running_co();
-
-    new_co->mount_on(src_co);
-    // TODO:此时task已不是running状态，考虑是否有必要设置status和running_co
-    // goto scheduler
-    task->running_co=new_co;
-    uint8_t next_task = loop_local_scheduler();
-    if(next_task!=loop->running_task_idx){
-        loop->running_task_idx=next_task;
-        // switch_to_next_task
+    if(old_task){
+        old_task->status=SUSPENDED;
+        loop->tasks.push(old_task);
     }
-    // switched back or not switched at all
-    curr_running_co=task->running_co;
+    async_task* next_task = loop->tasks.front();
+    loop->tasks.pop();
+    loop->running_task=next_task;
+    next_task->status=RUNNING;
+    return next_task;
 }
-
-uint8_t stackless::loop_local_scheduler(){
-    //TODO
-    stackless::event_loop_s* loop=stackless::get_running_loop();
-    uint8_t next_task_idx = (loop->running_task_idx+1)%loop->tasks.size();
-    return next_task_idx;
-}
-
 
 
 async_task* stackless::event_loop_s::get_running_task(){
     if(status==RUNNING){
-        return tasks[running_task_idx];
+        return running_task;
     }
     std::cerr<<"There is no running task."<<std::endl;
     return nullptr;
@@ -244,7 +241,44 @@ async_task* stackless::event_loop_s::get_running_task(){
 bool stackless::event_loop_s::run_until_complete(){
     status=RUNNING;
     running_loop=this;
-    running_task_idx = loop_local_scheduler();
-    switch_user_context(stack, tasks[running_task_idx]->stack);
+    running_task = loop_local_scheduler(nullptr);
+    do{
+        switch_user_context(stack, running_task->stack);
+    } while(!tasks.empty());
     return true;
+}
+
+void stackless::event_loop_s::notify_running_task_end() const{
+    async_task* old_task=running_task;
+    old_task->status=DESTROYED;
+    if(!tasks.empty()){
+        loop_local_scheduler(nullptr);
+    }
+    switch_user_context(old_task->stack, stack);
+}
+
+/**
+ * Entry of a wrapped coroutine. Also the entry of an async_task.
+ * @param f function to run
+ */
+void stackless::co_entry(std::function<void()> *f) {
+    std::cout<<"this is a co_entry\n";
+    (*f)();
+    std::cout<<"exiting co_entry...\n";
+//    event_loop_s* loop=get_running_loop();
+//    loop->notify_running_task_end();
+}
+
+void stackless::co_entry(FP_CALL_BACK f) {
+    std::cout<<"this is a co_entry\n";
+    f();
+    std::cout<<"exiting co_entry...\n";
+//    event_loop_s* loop=get_running_loop();
+//    loop->notify_running_task_end();
+}
+
+void stackless::co_entry() {
+    CDBG("co_entry");
+    auto loop=get_running_loop();
+    loop->running_task->run();
 }

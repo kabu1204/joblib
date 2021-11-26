@@ -41,14 +41,17 @@ public:
         }
         stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
         sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
+//        void* _sp;
+//        sp=(DWORD*)((uintptr_t)_sp & ~0xF);
         if(CALL_BACK_FUNC){
+            std::cout<<"pushing callback function...\n";
             *(--sp)=(DWORD)CALL_BACK_FUNC; // coroutine cleanup
         }
     }
 
     template<class T>
     void pushq(T content){
-        *(--sp)=reinterpret_cast<DWORD>(content);
+        *(--sp)=(DWORD)(content);
     }
 
     template<class T>
@@ -60,11 +63,12 @@ public:
 };
 
 extern "C" void switch_user_context(user_stack* src_stack, user_stack* dst_stack);
-extern "C" void _stack_clean(user_stack* stack);
+extern "C" void _swap_back(user_stack* stack);
 
 #ifdef __x86_64__
 __asm__(
 ".globl _switch_user_context\n\t"
+".globl __swap_back\n\t"
 "_switch_user_context:\n\t"
 "movq %rdi,16(%rdi) \n\t"
 "movq %rbx,24(%rdi) \n\t"
@@ -87,9 +91,9 @@ __asm__(
 //"popq %rdi \n\t"
 //"addq $8,%rsp \n\t"
 //"jmpq *-8(%rsp) \n\t"
-"retq \n\t"
+"retq\n\t"
 
-"__stack_clean:\n\t"
+"__swap_back:\n\t"
 "movq 72(%rdi),%rsi\n\t"
 "movq (%rsi),%rsp \n\t" // %rsp = new_co->stack
 

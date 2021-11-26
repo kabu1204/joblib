@@ -32,7 +32,8 @@ struct name:public stackless::co{ \
     }                        \
     template<class... Arg>                          \
     void operator() (Arg... args){                                  \
-        _f=std::bind(&name::_co_func_, this, args...);      \
+        _f=std::bind(&name::_co_func_, this, args...); \
+        _fp=&_f;                         \
     }\
 
 
@@ -116,6 +117,7 @@ namespace stackless {
         uint8_t co_v_state_cnt;
         void* fp;
         std::function<void()> _f;
+        std::function<void()>* _fp;
     public:
         void* _res_;
 
@@ -181,6 +183,8 @@ namespace stackless {
         stackless::co* running_co;
         user_stack* stack;
         uint8_t status;
+        std::function<void()> _run;
+        std::function<void()>* _prun;
 
         void run();
 
@@ -198,22 +202,25 @@ namespace stackless {
     class event_loop_s{
     public:
         uint8_t status;
-        std::vector<async_task*> tasks;
+        std::queue<async_task*> tasks;
         uint8_t running_task_idx{0};
+        async_task* running_task;
         user_stack* stack;
 
         event_loop_s(){stack=new user_stack(0);}
 
-        event_loop_s(async_task* task){tasks.push_back(task);stack=new user_stack(0);}
+        event_loop_s(async_task* task){tasks.push(task);stack=new user_stack(0);}
 
         event_loop_s(std::vector<async_task*>::iterator begin, std::vector<async_task*>::iterator end){
-            std::copy(begin, end, tasks.begin());
+            for(auto it=begin;it!=end;++it) tasks.push(*it);
             stack=new user_stack(0);
         }
 
         async_task* get_running_task();
 
         bool run_until_complete();
+
+        void notify_running_task_end() const;
     };
 
     thread_local co* curr_running_co=nullptr;
@@ -234,16 +241,14 @@ namespace stackless {
 
     void co_ret();
 
-    uint8_t loop_local_scheduler();
+    async_task* loop_local_scheduler(async_task* old_task=nullptr);
 
-    void co_entry(std::function<void()>* f){
-//    std::cout<<"this is a coro_entry\n";
-        (*f)();
-//    std::cout<<"exiting coro_entry...\n";
-        co_end();
-    }
+    void co_entry(std::function<void()>* f);
+
+    typedef void (*FP_CALL_BACK)();
+    void co_entry(FP_CALL_BACK f);
+
+    void co_entry();
 }
-
 #include "async_stackless_impl.h"
-
 #endif //JOBLIB_ASYNC_STACKLESS_H

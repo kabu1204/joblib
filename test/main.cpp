@@ -48,15 +48,9 @@ void test_for_gen_stkless(){
 void test_for_co_stkless(){
     co2 *p=new co2();
     p->isRootCo=true;
-
-    stackless::async_task* task = new stackless::async_task(p);
-
-    stackless::event_loop_s* loop = new stackless::event_loop_s(task);
-    running_loop = loop;
-    running_loop->status = RUNNING;
-    running_loop->running_task_idx=0;
-
-    task->run();
+    stackless::async_task* task = new async_task(p);
+    stackless::event_loop_s* loop = new event_loop_s(task);
+    loop->run_until_complete();
 }
 
 void test_for_eventloop(){
@@ -213,8 +207,8 @@ R getRetValue(R(*)(Args...));
 int main(){
 //    auto a = [](int c){return 1;};
 //    using ret_t = decltype(getRetValue(coro_entry));
-//test_for_co_stkless();
-test_for_gen_stkless();
+test_for_co_stkless();
+//test_for_gen_stkless();
 //    test_for_eventloop();
 //    test_for_coro();
 //    test_for_async();
