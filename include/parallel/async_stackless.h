@@ -27,8 +27,11 @@
 
 #define CO_STKLESS(name,...) \
 struct name:public stackless::co{ \
-    name():stackless::co(__VA_ARGS__){                 \
-        fp=union_cast<void*>(&name::_co_func_);      \
+    template<class... Arg>                         \
+    name(Arg... args):stackless::co(){                 \
+        fp=union_cast<void*>(&name::_co_func_);    \
+        _f=std::bind(&name::_co_func_, this, args...); \
+        _fp=&_f;                         \
     }                        \
     template<class... Arg>                          \
     void operator() (Arg... args){                                  \
@@ -60,7 +63,7 @@ struct name:public stackless::generator_s<RET_TYPE, RECV_TYPE>{ \
 
 #define GEN_DEF(...) \
     void _co_func_ ( __VA_ARGS__ ){ \
-    co_v_status=RUNNING;                        \
+    co_v_status=RUNNING;                  \
     switch(co_v_state){                 \
     case 0:                          \
         _res_=(ret_type*)malloc(sizeof(ret_type)); \
@@ -75,7 +78,7 @@ stopped=true;     \
 }                 \
 };\
 
-#define CO_AWAIT(new_co, ...) _co_await<new_co::ret_type>(new new_co(), ##__VA_ARGS__ )
+#define CO_AWAIT(new_co, ...) _co_await<new_co::ret_type>(new new_co(__VA_ARGS__))
 
 
 #define CO_YIELD(ret, recv) \

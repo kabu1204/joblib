@@ -21,3 +21,4 @@ cmake-build-reldeb/
 **/Makefile
 /test/att.s
 /cmake-build-debugremoteaarch64/
+/cmake-build-relwithdebinfo/

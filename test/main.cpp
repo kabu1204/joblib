@@ -47,12 +47,14 @@ DEF_END;         // be sure to DEF_END at end
 CO_STKLESS(co4)
     CO_DEF(int)
             dprint("co4\n");
+            CO_RET(10);
 DEF_END
 
 CO_STKLESS(co3, nullptr, true)
     CO_DEF(int)
             dprint("co3\n");
             CO_AWAIT(co4);
+            CO_RET(10);
 DEF_END
 
 void test_for_gen_stkless(){
@@ -67,6 +69,7 @@ void test_for_co_stkless(){
     co2 *p1=new co2();
     p1->isRootCo=true;
     co3 *p2=new co3();
+    p2->isRootCo= true;
     stackless::async_task* task1 = new async_task(p1);
     stackless::async_task* task2 = new async_task(p2);
     std::vector<stackless::async_task*> vec={task1,task2};

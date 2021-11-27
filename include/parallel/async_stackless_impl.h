@@ -184,7 +184,7 @@ void stackless::async_task::run(){
     status=RUNNING;
     running_co=root_co;
     curr_running_co=running_co;
-    root_co->run_once();
+    root_co->run_once_stdfunc();
 }
 
 
@@ -213,7 +213,9 @@ ret_type stackless::_co_await(stackless::co* new_co, Arg... args) {
     }
     // switched back or not switched at all
     curr_running_co=task->running_co;
-    new_co->run_once(args...);
+//    new_co->run_once(args...);
+    new_co->run_once_stdfunc();
+    dprint("%d",new_co->get<ret_type>());
     return new_co->get<ret_type>();
 }
 
