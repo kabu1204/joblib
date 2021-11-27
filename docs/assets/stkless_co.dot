@@ -1,6 +1,32 @@
-digraph co {
-    co;
-    async_task;
-    event_loop;
-    co->async_task->event_loop;
+digraph coroutine {
+    graph [ dpi = 300 ];
+    compound=true;
+    label="Event loop L";
+    s [label="Scheduler"];
+    subgraph cluster_task1 {
+        label="Task 1";
+        {rank=same;b,g}
+        a [label="Coroutine A"];
+        b [label="Coroutine B"];g [label="Generator G"];
+        b -> a [label="⑤B::co_ret();"];
+        concentrate=true
+        a -> g [label="⑥G::next();"];
+        g -> a [label="⑦G::co_yield();"];
+    }
+    subgraph cluster_task2 {
+        label="Task 2";
+        {rank=same;c,d}
+        c [label="Coroutine C"];d [label="Coroutine D"];
+
+        d -> c [label="D::co_ret();"];
+    }
+
+    c -> s [label="③co_await(D());"];
+    a -> s [label="①end of task1(root co end)"];
+    a -> s [label="⑧co_await(B()); Suspend self."];
+    s -> c [label="②Pick task2"];
+    s -> b [label="④Pick task1"];
+    s -> d [label="⑨Pick task2"];
+
+    // {rank=same; s,cluster_task1,cluster_task2}
 }
