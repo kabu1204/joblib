@@ -7,35 +7,53 @@ void save_image(){}
 coroutine *main_co;
 coroutine *sub_co;
 
+GEN_STKLESS(gen1,int,int)
+    int i;
+    int b;
+    int _;
+    GEN_DEF(int c)
+        _=c;
+        for(i=0;i<_;++i){
+            CO_YIELD(i,b);
+//            std::cout<<b<<std::endl;
+        }
+GEN_END;
+
 CO_STKLESS(co1)
     //1: Declare local variables you need
     int a,b,i;
     //2: Declare function and implement it like this
 CO_DEF(int, int c)  // function ProtoType
     a=c;
-    std::cout<<a<<std::endl;
+    dprint("get from co2:%d\n",a);
     CO_RET(c);
 DEF_END;         // be sure to DEF_END at end
 
 CO_STKLESS(co2)
     //1: Declare local variables you need
     int a,b,i;
+    gen1 g;
     //2: Declare function and implement it like this
     CO_DEF(int)  // function ProtoType
         a= CO_AWAIT(co1,10);
-        std::cout<<"get from co1:"<<a<<std::endl;
+        dprint("ret from co1:%d\n",a);
+        g(3);
+        for(i=0;i<3;++i){
+            dprint("yield from gen1:%d\n",g.next());
+        }
         CO_RET(a);
 DEF_END;         // be sure to DEF_END at end
 
-GEN_STKLESS(gen1,int,int)
-int i;
-int b;
-    GEN_DEF(int c)
-        for(i=0;i<10;++i){
-            CO_YIELD(i,b);
-//            std::cout<<b<<std::endl;
-        }
-DEF_END;
+CO_STKLESS(co4)
+    CO_DEF(int)
+            dprint("co4\n");
+DEF_END
+
+CO_STKLESS(co3, nullptr, true)
+    CO_DEF(int)
+            dprint("co3\n");
+            CO_AWAIT(co4);
+DEF_END
 
 void test_for_gen_stkless(){
     gen1 g;
@@ -46,10 +64,13 @@ void test_for_gen_stkless(){
 }
 
 void test_for_co_stkless(){
-    co2 *p=new co2();
-    p->isRootCo=true;
-    stackless::async_task* task = new async_task(p);
-    stackless::event_loop_s* loop = new event_loop_s(task);
+    co2 *p1=new co2();
+    p1->isRootCo=true;
+    co3 *p2=new co3();
+    stackless::async_task* task1 = new async_task(p1);
+    stackless::async_task* task2 = new async_task(p2);
+    std::vector<stackless::async_task*> vec={task1,task2};
+    stackless::event_loop_s* loop = new event_loop_s(vec.begin(),vec.end());
     loop->run_until_complete();
 }
 

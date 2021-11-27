@@ -67,7 +67,12 @@ struct name:public stackless::generator_s<RET_TYPE, RECV_TYPE>{ \
 
 
 #define DEF_END } \
-}                    \
+}                 \
+};\
+
+#define GEN_END } \
+stopped=true;     \
+}                 \
 };\
 
 #define CO_AWAIT(new_co, ...) _co_await<new_co::ret_type>(new new_co(), ##__VA_ARGS__ )
@@ -153,6 +158,7 @@ namespace stackless {
     struct generator_s:public co{
         using ret_type = RET_T;
         using recv_type = RECV_T;
+        bool stopped{false};
 //        std::function<void()> _f;
     public:
         RECV_T _recv_;
@@ -201,7 +207,7 @@ namespace stackless {
 
     class event_loop_s{
     public:
-        uint8_t status;
+        uint8_t status{SUSPENDED};
         std::queue<async_task*> tasks;
         uint8_t running_task_idx{0};
         async_task* running_task;
@@ -220,7 +226,7 @@ namespace stackless {
 
         bool run_until_complete();
 
-        void notify_running_task_end() const;
+        void notify_running_task_end();
     };
 
     thread_local co* curr_running_co=nullptr;

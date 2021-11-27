@@ -5,6 +5,13 @@
 #ifndef JOBLIB_USER_STACK_HPP
 #define JOBLIB_USER_STACK_HPP
 
+static inline size_t align16_forward(size_t x) {
+    return x & ~size_t(0x0F);
+}
+static inline size_t align16_backward(size_t x) {
+    return (x + size_t(15)) & ~size_t(15);
+}
+
 #ifdef __x86_64__
 struct registers
 {
@@ -39,8 +46,13 @@ public:
             stack_space=0;
             return;
         }
-        stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
-        sp=&stack_space[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
+        size_t stack_size_aligned = align16_backward(stack_size);
+        stack_space=(DWORD*)aligned_alloc(16,stack_size_aligned);
+//        stack_space=new DWORD[DEFAULT_CORO_STACK_SIZE/sizeof(DWORD)+1]; // on macOS, plus 1 to avoid stack_not_16_byte_aligned_error
+        sp=&stack_space[stack_size_aligned/sizeof(DWORD)]; // on macOS, minus 2 to avoid stack_not_16_byte_aligned_error
+        dprint("%p\n",sp);
+        sp=(DWORD*)align16_forward((size_t)sp);
+        dprint("%p\n",sp);
 //        void* _sp;
 //        sp=(DWORD*)((uintptr_t)_sp & ~0xF);
         if(CALL_BACK_FUNC){

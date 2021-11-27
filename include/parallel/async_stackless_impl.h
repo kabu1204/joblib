@@ -53,7 +53,6 @@ void stackless::co::await(stackless::co *new_co){
 template<class... Arg>
 void stackless::co::run_once(Arg... args){
     __asm inline volatile(
-    "subq $8, %%rsp\n\t"
     "callq *%[cofunc]"
     ::[cofunc]"a"(fp)
     );
@@ -74,6 +73,7 @@ T co::get() {
 }
 
 void co::run_once_stdfunc() {
+    dprint("");
     _f();
 }
 
@@ -83,6 +83,10 @@ void co::get() {/*do nothing*/}
 template<class RET_T, class RECV_T>
 RET_T generator_s<RET_T, RECV_T>::next() {
     _f();
+    if(stopped){
+        dprint("");
+        throw std::runtime_error("StopIteration");
+    }
     return *(RET_T*)_res_;
 }
 
@@ -113,7 +117,7 @@ GEN_STKLESS(co_example, int, int)
 DEF_END;         // be sure to DEF_END at end
 
 void tt(){
-    std::cout<<"in tt()\n";
+    dprint("");
 }
 
 stackless::async_task::async_task(stackless::co *co) {
@@ -124,14 +128,16 @@ stackless::async_task::async_task(stackless::co *co) {
     }
     root_co = co;
 
-    std::cout<<"Construct async_task\n";
+    dprint("Construct async_task\n");
     stack = new user_stack(DEFAULT_CORO_STACK_SIZE);
-//    _run = std::bind(&stackless::async_task::run,this);
-//    _prun=&_run;
-//    stack->regs.rdi=(DWORD)_prun;
-//    stack->pushq<void(std::function<void()>*)>(stackless::co_entry);
+    _run = std::bind(&stackless::async_task::run,this);
+    _prun=&_run;
+    stack->regs.rdi=(DWORD)(_prun);
+    stack->pushq<DWORD>(0xdeadbeef);    // keep 16-bytes aligned
+    stack->pushq<void(std::function<void()>*)>(stackless::co_entry);
 //    stack->regs.rdi=(DWORD)tt;
-    stack->pushq<void()>(stackless::co_entry);
+//    stack->pushq<DWORD>(0xdeadbeef);    // keep 16-bytes aligned
+//    stack->pushq<void()>(stackless::co_entry);
 }
 
 stackless::async_task::async_task(stackless::co *co, const char *name){
@@ -174,7 +180,7 @@ bool stackless::async_task::switch_to(stackless::co* dst_co){
 }
 
 void stackless::async_task::run(){
-    CDBG("in run\n");
+    dprint("in run\n");
     status=RUNNING;
     running_co=root_co;
     curr_running_co=running_co;
@@ -222,6 +228,7 @@ async_task* stackless::loop_local_scheduler(async_task* old_task){
         old_task->status=SUSPENDED;
         loop->tasks.push(old_task);
     }
+    dprint("size of tasks:%lu\n",loop->tasks.size());
     async_task* next_task = loop->tasks.front();
     loop->tasks.pop();
     loop->running_task=next_task;
@@ -243,16 +250,22 @@ bool stackless::event_loop_s::run_until_complete(){
     running_loop=this;
     running_task = loop_local_scheduler(nullptr);
     do{
+        dprint("switching to task\n");
         switch_user_context(stack, running_task->stack);
-    } while(!tasks.empty());
+        dprint("switched back from task\n");
+    } while(status != DESTROYED);
     return true;
 }
 
-void stackless::event_loop_s::notify_running_task_end() const{
+void stackless::event_loop_s::notify_running_task_end(){
+    dprint("task end.\n");
     async_task* old_task=running_task;
     old_task->status=DESTROYED;
     if(!tasks.empty()){
         loop_local_scheduler(nullptr);
+    }
+    else{
+        status=DESTROYED;
     }
     switch_user_context(old_task->stack, stack);
 }
@@ -262,23 +275,28 @@ void stackless::event_loop_s::notify_running_task_end() const{
  * @param f function to run
  */
 void stackless::co_entry(std::function<void()> *f) {
-    std::cout<<"this is a co_entry\n";
+    dprint("co_entry\n");
     (*f)();
-    std::cout<<"exiting co_entry...\n";
-//    event_loop_s* loop=get_running_loop();
-//    loop->notify_running_task_end();
+    dprint("back to co_entry\n");
+    event_loop_s* loop=get_running_loop();
+    loop->notify_running_task_end();
 }
 
 void stackless::co_entry(FP_CALL_BACK f) {
-    std::cout<<"this is a co_entry\n";
+    dprint("co_entry\n");
     f();
-    std::cout<<"exiting co_entry...\n";
-//    event_loop_s* loop=get_running_loop();
-//    loop->notify_running_task_end();
+    dprint("back to co_entry\n");
+    event_loop_s* loop=get_running_loop();
+    loop->notify_running_task_end();
 }
 
 void stackless::co_entry() {
-    CDBG("co_entry");
-    auto loop=get_running_loop();
+//    __asm inline volatile(
+//            "subq $8, %rsp\n\t"
+//            );
+    dprint("co_entry\n");
+    event_loop_s* loop=get_running_loop();
     loop->running_task->run();
+    dprint("back to co_entry\n");
+    loop->notify_running_task_end();
 }
