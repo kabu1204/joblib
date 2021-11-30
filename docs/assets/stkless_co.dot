@@ -18,12 +18,12 @@ digraph coroutine {
         {rank=same;c,d}
         c [label="Coroutine C"];d [label="Coroutine D"];
 
-        d -> c [label="D::co_ret();"];
+        d -> c [label="⑩D::co_ret();"];
     }
 
     c -> s [label="③co_await(D());"];
-    a -> s [label="①end of task1(root co end)"];
-    a -> s [label="⑧co_await(B()); Suspend self."];
+    a -> s [label="⑧end of task1(root co end)"];
+    a -> s [label="①co_await(B()); Suspend self."];
     s -> c [label="②Pick task2"];
     s -> b [label="④Pick task1"];
     s -> d [label="⑨Pick task2"];

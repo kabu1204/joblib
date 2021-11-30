@@ -24,3 +24,13 @@ xmake f -m debug    # or release/reldeb
 xmake
 ```
 shared libraries and executable files is in xmake-build
+
+### Parallel/async_stackless
+`stackless::co`: **Stackless coroutine**
+
+`stackless::async_task`: Async task with standalone user stack (implemented with assembly). use a root coroutine to create an async_task.
+
+`stackless::event_loop`: Wrapped by several async_tasks. Switching between `stackless::co` do not need to switch stack, which is Asymmetric. Switching between `stackless::async_task` will save the context(necessary registers and stack pointer) and switch to a new stack, which is Symmetrical.
+
+Below shows the flow of main::test_for_co_stkless()
+![eg](docs/assets/stkless_co.png) 
